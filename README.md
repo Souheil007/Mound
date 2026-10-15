@@ -217,10 +217,10 @@ curl -X POST http://localhost:8000/api/v1/blueprints/preflight \
 ```text
 mound/
 ├── apps/
-│   ├── api/                              # Python 3.12 + FastAPI Backend
+│   ├── backend/                          # Python 3.12 + FastAPI Backend
 │   │   ├── alembic/                      # Database migrations (Postgres 16 + pgvector)
 │   │   ├── app/
-│   │   │   ├── api/
+│   │   │   ├── routers/
 │   │   │   │   ├── v1/
 │   │   │   │   │   ├── agents.py         # Agent registration, quotas, trust tiers
 │   │   │   │   │   ├── blueprints.py     # Preflight dedup, Blueprint CRUD, version diffs
@@ -301,7 +301,7 @@ make infra
 ### 2. Run Backend Migrations & Start FastAPI + MCP Server
 
 ```bash
-cd apps/api
+cd apps/backend
 uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000

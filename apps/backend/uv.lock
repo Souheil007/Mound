@@ -1036,7 +1036,7 @@ wheels = [
 ]
 
 [[package]]
-name = "mound-api"
+name = "mound-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

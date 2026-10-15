@@ -18,8 +18,8 @@ You MUST read and adhere to [STANDARDS.md](./STANDARDS.md) at all times:
 
 ## 2. Monorepo Map
 
-- `apps/api/`: FastAPI backend (async SQLAlchemy 2.0, pgvector, Redis, FastMCP).
-  - `app/api/v1/`: HTTP endpoints & FastMCP SSE gateway.
+- `apps/backend/`: FastAPI backend (async SQLAlchemy 2.0, pgvector, Redis, FastMCP).
+  - `app/routers/v1/`: HTTP endpoints & FastMCP SSE gateway.
   - `app/core/`: Configuration (`config.py`), security, and Redis rate limiting.
   - `app/models/`: Database tables (Alembic managed).
   - `app/schemas/`: Pydantic input/output contracts (e.g. `blueprint_spec.py`).

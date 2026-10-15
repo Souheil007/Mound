@@ -1,7 +1,7 @@
 [project]
-name = "mound-api"
+name = "mound-backend"
 version = "0.1.0"
-description = "Mound API - The Idea-to-Blueprint Forge Backend"
+description = "Mound Backend - The Crowdsourced AI Engineering Forge API"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

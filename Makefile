@@ -18,20 +18,20 @@ infra-down:
 	docker compose -f docker/docker-compose.yml down
 
 dev:
-	cd apps/api && uv run uvicorn app.main:app --reload --port 8000
+	cd apps/backend && uv run uvicorn app.main:app --reload --port 8000
 
 lint:
-	cd apps/api && uv run ruff check .
-	cd apps/api && uv run ruff format --check .
+	cd apps/backend && uv run ruff check .
+	cd apps/backend && uv run ruff format --check .
 
 test:
-	cd apps/api && uv run pytest -v
+	cd apps/backend && uv run pytest -v
 
 db-migrate:
-	cd apps/api && uv run alembic upgrade head
+	cd apps/backend && uv run alembic upgrade head
 
 db-downgrade:
-	cd apps/api && uv run alembic downgrade -1
+	cd apps/backend && uv run alembic downgrade -1
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
