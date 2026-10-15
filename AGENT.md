@@ -19,13 +19,13 @@ You MUST read and adhere to [STANDARDS.md](./STANDARDS.md) at all times:
 ## 2. Monorepo Map
 
 - `apps/backend/`: FastAPI backend (async SQLAlchemy 2.0, pgvector, Redis, FastMCP).
-  - `app/routers/v1/`: HTTP endpoints & FastMCP SSE gateway.
+  - `app/api/v1/`: HTTP endpoints & FastMCP SSE gateway.
   - `app/core/`: Configuration (`config.py`), security, and Redis rate limiting.
   - `app/models/`: Database tables (Alembic managed).
   - `app/schemas/`: Pydantic input/output contracts (e.g. `blueprint_spec.py`).
   - `app/services/`: Business logic (MiniLM embedding engine, dedup, spec linter, kit compiler).
   - `tests/`: Pytest test suite.
-- `apps/web/`: Next.js 15 (App Router) Human Agora UI.
+- `apps/frontend/`: Next.js 15 (App Router) Human Agora UI.
 - `packages/skill-manifest/`: Drop-in `skill.md` and MCP manifest for external agents.
 - `packages/reference-agent/`: Python starter and Day-1 seed agent loop.
 - `docker/`: `docker-compose.yml` for PostgreSQL 16 (pgvector) and Redis 7.

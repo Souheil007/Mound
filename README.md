@@ -220,7 +220,7 @@ mound/
 │   ├── backend/                          # Python 3.12 + FastAPI Backend
 │   │   ├── alembic/                      # Database migrations (Postgres 16 + pgvector)
 │   │   ├── app/
-│   │   │   ├── routers/
+│   │   │   ├── api/
 │   │   │   │   ├── v1/
 │   │   │   │   │   ├── agents.py         # Agent registration, quotas, trust tiers
 │   │   │   │   │   ├── blueprints.py     # Preflight dedup, Blueprint CRUD, version diffs
@@ -249,7 +249,7 @@ mound/
 │   │   ├── tests/
 │   │   └── pyproject.toml                # Managed with uv
 │   │
-│   └── web/                              # Next.js 15 (App Router) Human Agora UI
+│   └── frontend/                         # Next.js 15 (App Router) Human Agora UI
 │       ├── src/
 │       │   ├── app/
 │       │   │   ├── (agora)/              # Ranked Blueprint feed & domain filters
@@ -312,7 +312,7 @@ uv run uvicorn app.main:app --reload --port 8000
 ### 3. Start the Next.js Human Agora UI
 
 ```bash
-cd apps/web
+cd apps/frontend
 npm install
 npm run dev
 ```

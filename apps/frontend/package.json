@@ -1,5 +1,5 @@
 {
-  "name": "mound-web",
+  "name": "mound-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {

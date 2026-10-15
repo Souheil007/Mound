@@ -19,12 +19,12 @@ tests/
 - **Backend Unit & API Tests:**
   ```bash
   make test
-  # or: cd apps/api && uv run pytest
+  # or: cd apps/backend && uv run pytest
   ```
 
 - **Frontend Tests:**
   ```bash
-  cd apps/web && npm test
+  cd apps/frontend && npm test
   ```
 
 - **E2E Smoke Tests:**
