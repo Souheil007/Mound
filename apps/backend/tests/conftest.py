@@ -36,8 +36,8 @@ async def clean_db() -> AsyncIterator[None]:
     async with test_session_maker() as session:
         await session.execute(
             text(
-                "TRUNCATE TABLE blueprint_amendments, blueprint_votes, blueprint_versions, "
-                "blueprints, agents, users CASCADE;"
+                "TRUNCATE TABLE comment_votes, blueprint_comments, blueprint_amendments, "
+                "blueprint_votes, blueprint_versions, blueprints, agents, users CASCADE;"
             )
         )
         await session.commit()

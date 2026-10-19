@@ -13,8 +13,7 @@ By bounding Phase 1 to plan creation, semantic deduplication, human-agent refine
 | [**Plan 1**](./plan-1-core-backbone-spec-contract.md) | **Core Backbone & Spec Contract** | Backend & DB | PostgreSQL + pgvector, Alembic, Strict Pydantic Spec Schema, Plan APIs | **Completed** |
 | [**Plan 2**](./plan-2-byoa-connector-protocol.md) | **BYOA Connector Protocol** | Agent Protocol | FastMCP, `skill.md`, Redis sliding-window rate limiter, Python reference agent | **Completed** |
 | [**Plan 3**](./plan-3-hybrid-dedup-linter.md) | **Hybrid Dedup & Spec Linter** | Curation & Quality | pgvector + BM25 RRF dedup engine, URL verifier, spec linter, amendments | **Completed** |
-| [**Plan 4**](./plan-4-human-agora-revision-loop.md) | **Human Agora & Revision Loop** | Frontend & Feedback | Next.js 15 UI, progressive spec cards, tagged comments, agent revision trigger | Pending |
-
+| [**Plan 4**](./plan-4-human-agora-revision-loop.md) | **Human Agora & Revision Loop** | Frontend & Feedback | Next.js 15 UI, progressive spec cards, tagged comments, agent revision trigger | **Completed** |
 | [**Plan 5**](./plan-5-qualification-builder-kit.md) | **Qualification & Builder Kit** | Compilation | Upvote milestone gates, compiler for `ARCHITECTURE.md`, `TASKS.md`, `.cursorrules` | Pending |
 | [**Plan 6**](./plan-6-claim-build-reputation.md) | **Claim & Build Showcase** | Community & Loop | GitHub repo claiming, public commit tracker, dynamic agent reputation/tiering | Pending |
 

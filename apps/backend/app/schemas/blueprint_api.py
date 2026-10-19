@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.models.blueprint import AmendmentStatus, BlueprintStatus
+from app.models.blueprint import AmendmentStatus, BlueprintStatus, CritiqueCategory
 from app.schemas.blueprint_spec import BlueprintSpec
 
 
@@ -31,6 +31,7 @@ class BlueprintVersionResponse(BaseModel):
     spec_payload: dict[str, Any]
     changelog_summary: str
     author_agent_id: uuid.UUID | None
+    triggered_by_comment_ids: list[uuid.UUID] = []
     created_at: datetime
 
 
@@ -44,6 +45,7 @@ class BlueprintDetailResponse(BaseModel):
     current_version_num: int
     upvotes_count: int
     comments_count: int
+    revision_requested_at: datetime | None = None
     co_author_agent_ids: list[uuid.UUID]
     spec: dict[str, Any]
     created_at: datetime
@@ -61,6 +63,9 @@ class BlueprintSummaryResponse(BaseModel):
     current_version_num: int
     upvotes_count: int
     comments_count: int
+    pain_evidence_urls: list[str] = []
+    explicit_non_goals: list[str] = []
+    mvp_deliverables: list[str] = []
     created_at: datetime
 
 
@@ -102,3 +107,109 @@ class AmendmentResponse(BaseModel):
     rationale: str
     status: AmendmentStatus
     created_at: datetime
+
+
+class BlueprintVoteRequest(BaseModel):
+    """Payload to vote or un-vote a blueprint."""
+
+    user_id: uuid.UUID = Field(..., description="UUID of the authenticated user.")
+
+
+class BlueprintVoteResponse(BaseModel):
+    """Result of blueprint upvote toggle."""
+
+    blueprint_id: uuid.UUID
+    upvotes_count: int
+    voted: bool
+
+
+class CommentCreateRequest(BaseModel):
+    """Payload to post structured critique on a blueprint."""
+
+    user_id: uuid.UUID = Field(..., description="UUID of the commenting user.")
+    category: CritiqueCategory = Field(
+        default=CritiqueCategory.GENERAL_FEEDBACK,
+        description="Categorization of the critique for agent consumption.",
+    )
+    content: str = Field(
+        ...,
+        min_length=5,
+        max_length=4000,
+        description="Detailed constructive critique or architectural challenge.",
+    )
+
+
+class CommentResponse(BaseModel):
+    """Response representation of a blueprint comment."""
+
+    id: uuid.UUID
+    blueprint_id: uuid.UUID
+    user_id: uuid.UUID
+    category: CritiqueCategory
+    content: str
+    upvotes_count: int
+    is_addressed: bool
+    addressed_in_version_id: uuid.UUID | None
+    created_at: datetime
+
+
+class CommentVoteRequest(BaseModel):
+    """Payload to upvote a critique comment."""
+
+    user_id: uuid.UUID = Field(..., description="UUID of the authenticated voter.")
+
+
+class CommentVoteResponse(BaseModel):
+    """Result of comment upvote action."""
+
+    comment_id: uuid.UUID
+    upvotes_count: int
+    voted: bool
+
+
+class VersionBumpRequest(BaseModel):
+    """Payload submitted by an agent (or community contributor) to publish a new spec revision."""
+
+    author_agent_id: uuid.UUID = Field(
+        ...,
+        description="UUID of the agent publishing the revision.",
+    )
+    expected_version_num: int = Field(
+        ...,
+        description="Optimistic locking version number to ensure no concurrent collision.",
+    )
+    spec: BlueprintSpec = Field(
+        ...,
+        description="The revised blueprint specification payload.",
+    )
+    changelog_summary: str = Field(
+        ...,
+        min_length=10,
+        max_length=1000,
+        description="Clear summary of what was revised and which critiques were addressed.",
+    )
+    addressed_comment_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="List of comment UUIDs addressed and resolved in this revision.",
+    )
+
+
+class AgentNotificationItem(BaseModel):
+    """Notification for an agent concerning new critiques on its blueprints."""
+
+    blueprint_id: uuid.UUID
+    blueprint_slug: str
+    comment_id: uuid.UUID
+    category: CritiqueCategory
+    content: str
+    upvotes_count: int
+    created_at: datetime
+
+
+class AgentNotificationsResponse(BaseModel):
+    """Batch of unaddressed critiques requiring attention from the agent."""
+
+    agent_id: uuid.UUID
+    unaddressed_critiques: list[AgentNotificationItem]
+    total_unaddressed: int
+

@@ -2,11 +2,12 @@
 
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pgvector.sqlalchemy import Vector
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +24,7 @@ class BlueprintStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     OPEN = "OPEN"
     QUALIFIED = "QUALIFIED"
+    OPEN_FOR_COMMUNITY_REVISION = "OPEN_FOR_COMMUNITY_REVISION"
     READY_FOR_BUILD = "READY_FOR_BUILD"
     CLAIMED = "CLAIMED"
     SHIPPED = "SHIPPED"
@@ -73,6 +75,10 @@ class Blueprint(Base):
         default=0,
         nullable=False,
     )
+    revision_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     co_author_agent_ids: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(UUID(as_uuid=True)),
         default=list,
@@ -102,6 +108,12 @@ class Blueprint(Base):
         "BlueprintAmendment",
         back_populates="blueprint",
         cascade="all, delete-orphan",
+    )
+    comments: Mapped[list["BlueprintComment"]] = relationship(
+        "BlueprintComment",
+        back_populates="blueprint",
+        cascade="all, delete-orphan",
+        order_by="BlueprintComment.created_at.desc()",
     )
 
 
@@ -231,3 +243,103 @@ class BlueprintAmendment(Base):
 
     blueprint: Mapped["Blueprint"] = relationship("Blueprint", back_populates="amendments")
     submitting_agent: Mapped["Agent"] = relationship("Agent")
+
+
+class CritiqueCategory(str, enum.Enum):
+    """Structured categories for human critique and feedback."""
+
+    MISSING_REQUIREMENT = "MISSING_REQUIREMENT"
+    ARCHITECTURE_FLAW = "ARCHITECTURE_FLAW"
+    SIMPLER_ALTERNATIVE = "SIMPLER_ALTERNATIVE"
+    GENERAL_FEEDBACK = "GENERAL_FEEDBACK"
+
+
+class BlueprintComment(Base):
+    """Structured human feedback on a blueprint proposal."""
+
+    __tablename__ = "blueprint_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    blueprint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("blueprints.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[CritiqueCategory] = mapped_column(
+        SQLEnum(CritiqueCategory, name="critique_category_enum"),
+        default=CritiqueCategory.GENERAL_FEEDBACK,
+        nullable=False,
+        index=True,
+    )
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    upvotes_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        index=True,
+    )
+    is_addressed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+    addressed_in_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("blueprint_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    blueprint: Mapped["Blueprint"] = relationship(
+        "Blueprint",
+        back_populates="comments",
+    )
+    user: Mapped["User"] = relationship("User")
+    votes: Mapped[list["CommentVote"]] = relationship(
+        "CommentVote",
+        back_populates="comment",
+        cascade="all, delete-orphan",
+    )
+
+
+class CommentVote(Base):
+    """Upvote linking an authenticated user to a blueprint critique comment."""
+
+    __tablename__ = "comment_votes"
+    __table_args__ = (UniqueConstraint("user_id", "comment_id", name="uq_user_comment_vote"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    comment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("blueprint_comments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    user: Mapped["User"] = relationship("User")
+    comment: Mapped["BlueprintComment"] = relationship("BlueprintComment", back_populates="votes")
+

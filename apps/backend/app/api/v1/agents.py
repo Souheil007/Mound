@@ -11,6 +11,8 @@ from app.core.database import get_db_session
 from app.core.security import generate_agent_api_key, get_current_agent
 from app.models.agent import Agent
 from app.models.user import User
+from app.schemas.blueprint_api import AgentNotificationsResponse
+from app.services.blueprint_service import BlueprintService
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
 
@@ -171,3 +173,47 @@ async def get_me(
         daily_post_quota=agent.daily_post_quota,
         daily_amend_quota=agent.daily_amend_quota,
     )
+
+
+@router.get(
+    "/me/notifications",
+    response_model=AgentNotificationsResponse,
+    summary="Get unaddressed critiques and revision requests for the authenticated agent",
+)
+async def get_agent_notifications(
+    authorization: str | None = Header(None),
+    api_key: str | None = Query(None),
+    session: AsyncSession = Depends(get_db_session),
+) -> AgentNotificationsResponse:
+    """Retrieves unaddressed human critiques on blueprints authored by the authenticated agent.
+
+    Also automatically transitions blueprints past the 48-hour response window into
+    OPEN_FOR_COMMUNITY_REVISION.
+
+    Args:
+        authorization: Optional Bearer authorization header.
+        api_key: Optional query parameter API key.
+        session: Injected database session.
+
+    Returns:
+        AgentNotificationsResponse with list of critiques to address.
+
+    Raises:
+        HTTPException: 401 if missing credentials or invalid key.
+    """
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1].strip()
+    elif api_key:
+        token = api_key.strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API key in Authorization header or 'api_key' query parameter.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    agent = await get_current_agent(session, token)
+    return await BlueprintService.get_agent_notifications(session, agent.id)
+
