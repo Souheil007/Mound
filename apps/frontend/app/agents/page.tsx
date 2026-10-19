@@ -6,14 +6,12 @@ import { useAuth } from "@/lib/auth-context";
 import {
   fetchScoutsStatus,
   fetchUserAgents,
-  fetchUserQuota,
   registerNewAgent,
   revokeAgent,
 } from "@/lib/api";
 import {
   AgentProfile,
   ScoutStatus,
-  UserQuota,
 } from "@/lib/types";
 
 export default function AgentsDashboardPage() {
@@ -23,11 +21,9 @@ export default function AgentsDashboardPage() {
   const [revokingAgentId, setRevokingAgentId] = useState<string | null>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
-  // New Agent Modal State
+  // Developer API Key Modal State
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [newAgentName, setNewAgentName] = useState("");
-  const [newAgentDesc, setNewAgentDesc] = useState("");
-  const [newAgentTags, setNewAgentTags] = useState("");
+  const [newKeyLabel, setNewKeyLabel] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
@@ -39,8 +35,6 @@ export default function AgentsDashboardPage() {
   const [mcpConfigTab, setMcpConfigTab] = useState<"claude" | "cursor" | "sse">("claude");
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
-
-  const [quotaData, setQuotaData] = useState<UserQuota | null>(null);
 
   // Autonomous Scout Swarm State
   const [scouts, setScouts] = useState<ScoutStatus[]>([]);
@@ -80,15 +74,6 @@ export default function AgentsDashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const getSlotQuota = (trustScore: number = 0) => {
-    if (trustScore >= 100) return { maxSlots: 25, tierLabel: "Tier 3 (Elite)", nextReq: null };
-    if (trustScore >= 50) return { maxSlots: 10, tierLabel: "Tier 2 (Pro)", nextReq: "Reach 100 Trust Score for 25 slots" };
-    return { maxSlots: 3, tierLabel: "Tier 1 (Standard)", nextReq: "Reach 50 Trust Score for 10 slots" };
-  };
-
-  const { maxSlots, tierLabel, nextReq } = getSlotQuota(user?.trust_score ?? 0);
-  const isSlotLimitReached = agents.length >= (quotaData?.agent_slots_max ?? maxSlots);
-
   useEffect(() => {
     if (user?.id) {
       loadAgents(user.id);
@@ -100,14 +85,8 @@ export default function AgentsDashboardPage() {
   const loadAgents = async (userId: string) => {
     setIsLoadingAgents(true);
     try {
-      const [data, quota] = await Promise.all([
-        fetchUserAgents(userId, token || undefined),
-        fetchUserQuota(userId, token || undefined),
-      ]);
+      const data = await fetchUserAgents(userId, token || undefined);
       setAgents(data);
-      if (quota) {
-        setQuotaData(quota);
-      }
       if (data.length > 0 && !selectedAgentId) {
         setSelectedAgentId(data[0].agent_id);
       }
@@ -118,24 +97,20 @@ export default function AgentsDashboardPage() {
     }
   };
 
-  const handleRegisterAgent = async (e: React.FormEvent) => {
+  const handleCreateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setRegisterError(null);
     setIsRegistering(true);
 
     try {
-      const tags = newAgentTags
-        .split(",")
-        .map((t) => t.trim().toLowerCase())
-        .filter(Boolean);
-
+      const label = newKeyLabel.trim() || "Developer MCP Key";
       const created = await registerNewAgent(
         {
           owner_user_id: user.id,
-          name: newAgentName.trim(),
-          description: newAgentDesc.trim() || undefined,
-          specialty_tags: tags.length ? tags : ["devtools", "planning-agent"],
+          name: label,
+          description: "FastMCP Coding Assistant Key",
+          specialty_tags: ["fastmcp", "coding-agent"],
         },
         token || undefined
       );
@@ -146,11 +121,9 @@ export default function AgentsDashboardPage() {
 
       await loadAgents(user.id);
       setSelectedAgentId(created.agent_id);
-      setNewAgentName("");
-      setNewAgentDesc("");
-      setNewAgentTags("");
+      setNewKeyLabel("");
     } catch (err: any) {
-      setRegisterError(err.message || "Failed to register agent");
+      setRegisterError(err.message || "Failed to generate API key");
     } finally {
       setIsRegistering(false);
     }
@@ -428,277 +401,265 @@ export default function AgentsDashboardPage() {
         <>
           {/* Header Profile Section */}
           <div className="bg-forge-surface border border-forge-border rounded-xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center space-x-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-forge-amber to-forge-flame flex items-center justify-center text-xl font-black text-forge-bg shadow-lg shadow-forge-amber/20">
-            {user.username.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-bold text-white tracking-tight">{user.username}</h1>
-              {user.is_verified && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  VERIFIED
+            <div className="flex items-center space-x-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-forge-amber to-forge-flame flex items-center justify-center text-xl font-black text-forge-bg shadow-lg shadow-forge-amber/20">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-2xl font-bold text-white tracking-tight">{user.username}</h1>
+                  {user.is_verified && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      VERIFIED DEVELOPER
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">{user.email || "Google Account Session"}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-6 border-t md:border-t-0 md:border-l border-forge-border pt-4 md:pt-0 md:pl-6 text-xs font-mono">
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase">MCP Protocol</span>
+                <span className="text-sm font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  FastMCP SSE Live
                 </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">{user.email || "Google Account Session"}</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-6 border-t md:border-t-0 md:border-l border-forge-border pt-4 md:pt-0 md:pl-6 text-xs font-mono">
-          <div>
-            <span className="text-slate-400 block text-[10px] uppercase">Trust Score</span>
-            <span className="text-lg font-bold text-emerald-400">★ {user.trust_score}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block text-[10px] uppercase">Agent Slots</span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-lg font-bold ${isSlotLimitReached ? "text-amber-400" : "text-white"}`}>
-                {agents.length} / {quotaData?.agent_slots_max ?? maxSlots}
-              </span>
-              <span className="text-[10px] text-slate-400">({tierLabel})</span>
-            </div>
-          </div>
-          <div>
-            <span className="text-slate-400 block text-[10px] uppercase">Daily Proposal Limit (24h)</span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span
-                className={`text-lg font-bold ${
-                  quotaData && quotaData.daily_proposals_remaining === 0
-                    ? "text-red-400"
-                    : "text-forge-amber"
-                }`}
-              >
-                {quotaData ? `${quotaData.daily_proposals_used} / ${quotaData.daily_proposals_limit}` : "0 / 2"}
-              </span>
-              <span className="text-[10px] text-slate-400">
-                ({quotaData ? `${quotaData.daily_proposals_remaining} left today` : "2 left today"})
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowConnectModal(true)}
-            disabled={isSlotLimitReached || !user.is_verified}
-            title={
-              !user.is_verified
-                ? "Account verification required to connect agents"
-                : isSlotLimitReached
-                ? `Agent quota reached (${maxSlots}/${maxSlots}). Free a slot or boost Trust Score.`
-                : undefined
-            }
-            className={`ml-auto px-4 py-2 font-bold rounded-lg shadow-md transition-all ${
-              isSlotLimitReached || !user.is_verified
-                ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-forge-border"
-                : "bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg shadow-forge-amber/20"
-            }`}
-          >
-            + Connect Agent
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Agents List */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-mono uppercase tracking-wider text-slate-400">
-              Registered BYOA Agents ({agents.length}/{maxSlots})
-            </h2>
-          </div>
-
-          {!user.is_verified && (
-            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs">
-              <div className="font-semibold flex items-center gap-1.5 mb-1">
-                <span>🔒 Verification Required</span>
               </div>
-              <p className="text-[11px] text-amber-300/80">
-                Please verify your developer account email to register autonomous agents and protect against Sybil quota exploitation.
-              </p>
-            </div>
-          )}
-
-          {isSlotLimitReached && (
-            <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs">
-              <div className="font-semibold flex items-center justify-between mb-1">
-                <span>⚡ Quota Reached ({maxSlots}/{maxSlots} slots)</span>
-                <span className="text-[10px] font-mono text-amber-400">{tierLabel}</span>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase">Active Credentials</span>
+                <span className="text-sm font-bold text-white mt-0.5 block">
+                  {agents.length} API {agents.length === 1 ? "Key" : "Keys"}
+                </span>
               </div>
-              <p className="text-[11px] text-amber-300/80">
-                {nextReq ? `${nextReq} to unlock more slots.` : "Maximum platform quota reached."} Revoke an agent below to free up a slot immediately.
-              </p>
-            </div>
-          )}
-
-          {revokeError && (
-            <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
-              {revokeError}
-            </div>
-          )}
-
-          {isLoadingAgents ? (
-            <div className="p-8 text-center bg-forge-surface border border-forge-border rounded-xl">
-              <div className="animate-spin w-6 h-6 border-2 border-forge-amber border-t-transparent rounded-full mx-auto" />
-              <p className="text-xs text-slate-400 mt-2">Loading agents...</p>
-            </div>
-          ) : agents.length === 0 ? (
-            <div className="p-8 text-center bg-forge-surface border border-dashed border-forge-border rounded-xl">
-              <p className="text-xs text-slate-400 mb-4">No planning agents registered yet.</p>
               <button
                 onClick={() => setShowConnectModal(true)}
                 disabled={!user.is_verified}
-                className="px-4 py-2 bg-forge-amber/10 hover:bg-forge-amber/20 border border-forge-amber/30 text-forge-amber text-xs font-mono rounded-lg transition-colors disabled:opacity-50"
+                title={!user.is_verified ? "Account verification required to generate API keys" : undefined}
+                className="ml-auto px-4 py-2 font-bold rounded-lg shadow-md transition-all bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg shadow-forge-amber/20 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-mono"
               >
-                Register Your First Agent
+                + Generate API Key
               </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {agents.map((agent) => {
-                const isSelected = selectedAgentId === agent.agent_id;
-                return (
-                  <div
-                    key={agent.agent_id}
-                    onClick={() => setSelectedAgentId(agent.agent_id)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? "bg-forge-amber/10 border-forge-amber shadow-md shadow-forge-amber/10"
-                        : "bg-forge-surface border-forge-border hover:border-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-bold text-white text-sm">{agent.name}</h3>
-                        <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">
-                          {agent.description || "Autonomous planning agent"}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-forge-border text-slate-300">
-                        Tier {agent.trust_tier}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1 mt-3">
-                      {agent.specialty_tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-[10px] font-mono px-1.5 py-0.5 bg-forge-bg text-slate-400 rounded"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 mt-3 pt-2 border-t border-forge-border/50">
-                      <span>Quota: {agent.daily_post_quota} posts/day</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-forge-amber font-semibold">
-                          {isSelected ? "Selected for MCP ●" : "Select"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRevokeAgent(agent.agent_id);
-                          }}
-                          disabled={revokingAgentId === agent.agent_id}
-                          className="px-2 py-0.5 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-400 hover:text-red-300 text-[10px] transition-colors disabled:opacity-50"
-                          title="Revoke credentials & free slot immediately"
-                        >
-                          {revokingAgentId === agent.agent_id ? "Revoking..." : "Revoke"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Right Columns: MCP Config & Live Workflow Runner */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* MCP Protocol Integration Card */}
-          <div className="bg-forge-surface border border-forge-border rounded-xl p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                  <span>Model Context Protocol (MCP) Integration</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    FastMCP SSE Live
-                  </span>
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Mount the Mound Forge MCP server in your local coding agent environment.
-                </p>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex bg-forge-bg p-1 rounded-lg border border-forge-border text-xs font-mono">
-                <button
-                  onClick={() => setMcpConfigTab("claude")}
-                  className={`px-3 py-1 rounded-md transition-colors ${
-                    mcpConfigTab === "claude" ? "bg-forge-surface text-forge-amber font-bold" : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  Claude Desktop
-                </button>
-                <button
-                  onClick={() => setMcpConfigTab("cursor")}
-                  className={`px-3 py-1 rounded-md transition-colors ${
-                    mcpConfigTab === "cursor" ? "bg-forge-surface text-forge-amber font-bold" : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  Cursor / SSE
-                </button>
-              </div>
-            </div>
-
-            {/* Config Snippet Viewer */}
-            <div className="relative">
-              <pre className="p-4 bg-forge-bg border border-forge-border rounded-lg text-xs font-mono text-slate-300 overflow-x-auto leading-relaxed">
-                {mcpConfigTab === "claude" ? getClaudeConfigSnippet() : getCursorConfigSnippet()}
-              </pre>
-              <button
-                onClick={() => copyToClipboard(mcpConfigTab === "claude" ? getClaudeConfigSnippet() : getCursorConfigSnippet(), true)}
-                className="absolute top-3 right-3 px-2.5 py-1 bg-forge-surface hover:bg-slate-800 border border-forge-border rounded text-[11px] font-mono text-slate-300 transition-colors"
-              >
-                {copiedSnippet ? "Copied!" : "Copy Config"}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 text-[11px] font-mono text-slate-400">
-              <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
-                <span className="text-forge-amber font-semibold block">mound_preflight_check</span>
-                <span>Semantic uniqueness</span>
-              </div>
-              <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
-                <span className="text-forge-amber font-semibold block">mound_submit_blueprint</span>
-                <span>Linter + 2-tier dedup</span>
-              </div>
-              <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
-                <span className="text-forge-amber font-semibold block">mound_submit_spec_pr</span>
-                <span>Spec amendments</span>
-              </div>
-              <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
-                <span className="text-forge-amber font-semibold block">mound_publish_version</span>
-                <span>Optimistic lock v2+</span>
-              </div>
             </div>
           </div>
 
-        </div>
-      </div>
-    </>
-  )}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left Column: Developer API Credentials */}
+            <div className="lg:col-span-1 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-mono uppercase tracking-wider text-slate-400">
+                  Developer API Keys ({agents.length})
+                </h2>
+              </div>
 
-  {/* Connect New Agent Modal */}
+              {!user.is_verified && (
+                <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs">
+                  <div className="font-semibold flex items-center gap-1.5 mb-1">
+                    <span>🔒 Verification Required</span>
+                  </div>
+                  <p className="text-[11px] text-amber-300/80">
+                    Verify your developer email to create authenticated API keys for FastMCP.
+                  </p>
+                </div>
+              )}
+
+              {revokeError && (
+                <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
+                  {revokeError}
+                </div>
+              )}
+
+              {newlyCreatedKey && (
+                <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 font-mono">
+                      ✓ New API Key Generated
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(newlyCreatedKey)}
+                      className="text-xs font-mono text-forge-amber hover:underline"
+                    >
+                      {copiedKey ? "Copied!" : "Copy Key"}
+                    </button>
+                  </div>
+                  <div className="p-2 bg-forge-bg border border-forge-border rounded text-[11px] font-mono text-emerald-300 break-all select-all">
+                    {newlyCreatedKey}
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Automatically applied to the FastMCP configuration snippet.
+                  </p>
+                </div>
+              )}
+
+              {isLoadingAgents ? (
+                <div className="p-8 text-center bg-forge-surface border border-forge-border rounded-xl">
+                  <div className="animate-spin w-6 h-6 border-2 border-forge-amber border-t-transparent rounded-full mx-auto" />
+                  <p className="text-xs text-slate-400 mt-2">Loading API credentials...</p>
+                </div>
+              ) : agents.length === 0 ? (
+                <div className="p-8 text-center bg-forge-surface border border-dashed border-forge-border rounded-xl space-y-3">
+                  <p className="text-xs text-slate-400">No developer API keys generated yet.</p>
+                  <button
+                    onClick={() => setShowConnectModal(true)}
+                    disabled={!user.is_verified}
+                    className="px-4 py-2 bg-forge-amber/10 hover:bg-forge-amber/20 border border-forge-amber/30 text-forge-amber text-xs font-mono rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Generate Your First API Key
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {agents.map((agent) => {
+                    const isSelected = selectedAgentId === agent.agent_id;
+                    return (
+                      <div
+                        key={agent.agent_id}
+                        onClick={() => setSelectedAgentId(agent.agent_id)}
+                        className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-forge-amber/10 border-forge-amber shadow-md shadow-forge-amber/10"
+                            : "bg-forge-surface border-forge-border hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-bold text-white text-sm">{agent.name}</h3>
+                            <p className="text-xs text-slate-400 mt-0.5 font-mono text-[11px]">
+                              ID: {agent.agent_id.slice(0, 8)}...
+                            </p>
+                          </div>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-forge-border text-slate-300">
+                            FastMCP Key
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 mt-3 pt-2 border-t border-forge-border/50">
+                          <span className="text-forge-amber font-semibold">
+                            {isSelected ? "Active in Config ●" : "Click to Select"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRevokeAgent(agent.agent_id);
+                            }}
+                            disabled={revokingAgentId === agent.agent_id}
+                            className="px-2 py-0.5 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-400 hover:text-red-300 text-[10px] transition-colors disabled:opacity-50"
+                            title="Revoke this API key immediately"
+                          >
+                            {revokingAgentId === agent.agent_id ? "Revoking..." : "Revoke"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Scoped Capabilities Info */}
+              <div className="bg-forge-surface/60 border border-forge-border rounded-xl p-4 text-xs font-mono space-y-2 text-slate-400">
+                <span className="text-slate-300 font-bold block text-[11px] uppercase tracking-wider">
+                  Key Capabilities & Permissions
+                </span>
+                <ul className="space-y-1.5 text-[11px]">
+                  <li className="flex items-center gap-1.5 text-slate-300">
+                    <span className="text-emerald-400">✓</span> Semantic preflight uniqueness check
+                  </li>
+                  <li className="flex items-center gap-1.5 text-slate-300">
+                    <span className="text-emerald-400">✓</span> Automated blueprint proposal creation
+                  </li>
+                  <li className="flex items-center gap-1.5 text-slate-300">
+                    <span className="text-emerald-400">✓</span> Collaborative spec amendments (PRs)
+                  </li>
+                  <li className="flex items-center gap-1.5 text-slate-300">
+                    <span className="text-emerald-400">✓</span> Version publishing with optimistic lock
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Right Column: MCP Integration */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-forge-surface border border-forge-border rounded-xl p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                      <span>Model Context Protocol (MCP) Integration</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                        FastMCP SSE Live
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Mount the Mound Forge MCP server in your local coding agent environment.
+                    </p>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex bg-forge-bg p-1 rounded-lg border border-forge-border text-xs font-mono">
+                    <button
+                      onClick={() => setMcpConfigTab("claude")}
+                      className={`px-3 py-1 rounded-md transition-colors ${
+                        mcpConfigTab === "claude" ? "bg-forge-surface text-forge-amber font-bold" : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Claude Desktop
+                    </button>
+                    <button
+                      onClick={() => setMcpConfigTab("cursor")}
+                      className={`px-3 py-1 rounded-md transition-colors ${
+                        mcpConfigTab === "cursor" ? "bg-forge-surface text-forge-amber font-bold" : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Cursor / SSE
+                    </button>
+                  </div>
+                </div>
+
+                {/* Config Snippet Viewer */}
+                <div className="relative">
+                  <pre className="p-4 bg-forge-bg border border-forge-border rounded-lg text-xs font-mono text-slate-300 overflow-x-auto leading-relaxed">
+                    {mcpConfigTab === "claude" ? getClaudeConfigSnippet() : getCursorConfigSnippet()}
+                  </pre>
+                  <button
+                    onClick={() => copyToClipboard(mcpConfigTab === "claude" ? getClaudeConfigSnippet() : getCursorConfigSnippet(), true)}
+                    className="absolute top-3 right-3 px-2.5 py-1 bg-forge-surface hover:bg-slate-800 border border-forge-border rounded text-[11px] font-mono text-slate-300 transition-colors"
+                  >
+                    {copiedSnippet ? "Copied!" : "Copy Config"}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 text-[11px] font-mono text-slate-400">
+                  <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
+                    <span className="text-forge-amber font-semibold block">mound_preflight_check</span>
+                    <span>Semantic uniqueness</span>
+                  </div>
+                  <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
+                    <span className="text-forge-amber font-semibold block">mound_submit_blueprint</span>
+                    <span>Linter + 2-tier dedup</span>
+                  </div>
+                  <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
+                    <span className="text-forge-amber font-semibold block">mound_submit_spec_pr</span>
+                    <span>Spec amendments</span>
+                  </div>
+                  <div className="p-2 rounded bg-forge-bg/60 border border-forge-border">
+                    <span className="text-forge-amber font-semibold block">mound_publish_version</span>
+                    <span>Optimistic lock v2+</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Generate API Key Modal */}
       {showConnectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div
@@ -721,15 +682,15 @@ export default function AgentsDashboardPage() {
                   <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3 text-xl font-bold">
                     ✓
                   </div>
-                  <h3 className="text-lg font-bold text-white">Agent Connected Successfully!</h3>
+                  <h3 className="text-lg font-bold text-white">API Key Generated!</h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Store your secret API key safely. It will not be shown again.
+                    Store this secret key securely. It will not be shown again in plain text.
                   </p>
                 </div>
 
                 <div className="p-3 bg-forge-bg border border-forge-border rounded-lg">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-mono uppercase text-slate-400">Agent API Key</span>
+                    <span className="text-[10px] font-mono uppercase text-slate-400">Secret Key</span>
                     <button
                       onClick={() => copyToClipboard(newlyCreatedKey)}
                       className="text-xs text-forge-amber hover:underline font-mono"
@@ -743,7 +704,7 @@ export default function AgentsDashboardPage() {
                 </div>
 
                 <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs">
-                  This key provides write access to submit blueprints and spec PRs under your account.
+                  This key is automatically applied to your Claude Desktop & Cursor config snippets.
                 </div>
 
                 <button
@@ -757,30 +718,17 @@ export default function AgentsDashboardPage() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleRegisterAgent} className="space-y-4">
+              <form onSubmit={handleCreateKey} className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-bold text-white">Connect New Planning Agent</h3>
+                  <h3 className="text-lg font-bold text-white">Generate Developer API Key</h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Generate an authenticated MCP profile and scoped API key for your agent.
+                    Create an authenticated FastMCP key for Claude Desktop, Cursor, or your autonomous agent.
                   </p>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-forge-bg border border-forge-border text-xs font-mono">
-                  <span className="text-slate-400">Allocated Quota:</span>
-                  <span className={isSlotLimitReached ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
-                    {agents.length} / {maxSlots} slots used ({tierLabel})
-                  </span>
                 </div>
 
                 {!user?.is_verified && (
                   <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
-                    Account verification is required before registering agents. Please verify your email first.
-                  </div>
-                )}
-
-                {isSlotLimitReached && (
-                  <div className="p-3 rounded-lg bg-amber-950/50 border border-amber-800/80 text-amber-300 text-xs">
-                    Agent quota limit reached ({maxSlots}/{maxSlots}). Revoke an unused agent to free up a slot.
+                    Account verification is required before generating API keys. Please verify your email first.
                   </div>
                 )}
 
@@ -792,42 +740,18 @@ export default function AgentsDashboardPage() {
 
                 <div>
                   <label className="block text-xs font-mono text-slate-400 mb-1">
-                    Agent Name *
+                    Key Label / Description (Optional)
                   </label>
                   <input
                     type="text"
-                    value={newAgentName}
-                    onChange={(e) => setNewAgentName(e.target.value)}
-                    placeholder="e.g. StorageArchScout"
-                    required
+                    value={newKeyLabel}
+                    onChange={(e) => setNewKeyLabel(e.target.value)}
+                    placeholder="e.g. Cursor IDE, Claude Desktop, Local Agent"
                     className="w-full bg-forge-bg border border-forge-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-forge-amber"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-mono text-slate-400 mb-1">
-                    Agent Description
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={newAgentDesc}
-                    onChange={(e) => setNewAgentDesc(e.target.value)}
-                    placeholder="Brief description of the agent focus or architecture specialty"
-                    className="w-full bg-forge-bg border border-forge-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-forge-amber"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-mono text-slate-400 mb-1">
-                    Specialty Tags (comma-separated)
-                  </label>
-                  <input
-                    type="text"
-                    value={newAgentTags}
-                    onChange={(e) => setNewAgentTags(e.target.value)}
-                    placeholder="kubernetes, storage, devtools"
-                    className="w-full bg-forge-bg border border-forge-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-forge-amber"
-                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Helps you identify which coding tool or machine is using this credential.
+                  </p>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-2">
@@ -840,10 +764,10 @@ export default function AgentsDashboardPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isRegistering || !newAgentName.trim() || isSlotLimitReached || !user?.is_verified}
+                    disabled={isRegistering || !user?.is_verified}
                     className="px-4 py-2 bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg font-bold text-xs font-mono rounded-lg transition-all disabled:opacity-50"
                   >
-                    {isRegistering ? "Registering..." : "Generate Key & Connect"}
+                    {isRegistering ? "Generating..." : "Generate Key"}
                   </button>
                 </div>
               </form>
