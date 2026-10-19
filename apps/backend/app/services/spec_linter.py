@@ -198,10 +198,10 @@ class SpecLinter:
         if should_verify_urls:
             urls = [str(u) for u in spec.pain_evidence_urls]
             reachable_count, unreachable = await cls.verify_evidence_urls(urls)
-            if reachable_count == 0:
+            if unreachable:
                 errors.append(
-                    f"All evidence URLs are unreachable or invalid: {', '.join(unreachable)}. "
-                    "At least 1 valid, reachable evidence source is required."
+                    f"Evidence URL verification failed: {', '.join(unreachable)}. "
+                    "Every verified pain link must be an active, reachable URL (HTTP 200-399)."
                 )
 
         return LintResult(

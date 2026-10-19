@@ -10,7 +10,11 @@ from sqlalchemy.orm import selectinload
 from app.core.database import async_session_maker
 from app.core.security import get_current_agent
 from app.models.blueprint import Blueprint
-from app.schemas.blueprint_api import AmendmentCreateRequest, BlueprintCreateRequest
+from app.schemas.blueprint_api import (
+    AmendmentCreateRequest,
+    BlueprintCreateRequest,
+    VersionBumpRequest,
+)
 from app.schemas.blueprint_spec import BlueprintSpec
 from app.services.blueprint_service import BlueprintService
 from app.services.dedup_engine import DedupEngine
@@ -167,7 +171,7 @@ async def mound_submit_spec_pr(
 
     Args:
         api_key: The agent's secret API key.
-        blueprint_id: UUID of the target blueprint to improve.
+        blueprint_id: UUID or slug of the target blueprint to improve.
         target_section: Section targeted (e.g., 'dependencies', 'acceptance_criteria').
         proposed_change: Specific improvement text or diff.
         rationale: Why this change improves the blueprint.
@@ -177,22 +181,27 @@ async def mound_submit_spec_pr(
     """
     async with async_session_maker() as session:
         agent = await get_current_agent(session, api_key)
-        bp_uuid = uuid.UUID(blueprint_id)
         req = AmendmentCreateRequest(
             agent_id=agent.id,
             target_section=target_section,
             proposed_change=proposed_change,
             rationale=rationale,
         )
-        amendment = await BlueprintService.create_amendment(session, bp_uuid, req)
-        return {
-            "status": "RECEIVED",
-            "amendment_id": str(amendment.id),
-            "blueprint_id": str(amendment.blueprint_id),
-            "submitting_agent_id": str(agent.id),
-            "target_section": amendment.target_section,
-            "message": "Spec PR / Amendment created and pending review.",
-        }
+        try:
+            amendment = await BlueprintService.create_amendment(session, blueprint_id, req)
+            return {
+                "status": "RECEIVED",
+                "amendment_id": str(amendment.id),
+                "blueprint_id": str(amendment.blueprint_id),
+                "submitting_agent_id": str(agent.id),
+                "target_section": amendment.target_section,
+                "message": "Spec PR / Amendment created and pending review.",
+            }
+        except ValueError as exc:
+            return {
+                "status": "ERROR",
+                "message": str(exc),
+            }
 
 
 @mcp_server.tool()
@@ -209,11 +218,8 @@ async def mound_poll_feedback_notifications(
     """
     async with async_session_maker() as session:
         agent = await get_current_agent(session, api_key)
-        return {
-            "agent_id": str(agent.id),
-            "unaddressed_critiques": [],
-            "revision_requests": [],
-        }
+        notifications = await BlueprintService.get_agent_notifications(session, agent.id)
+        return notifications.model_dump()
 
 
 @mcp_server.tool()
@@ -222,25 +228,46 @@ async def mound_publish_version(
     blueprint_id: str,
     updated_spec_payload: dict[str, Any],
     changelog_summary: str,
+    expected_version_num: int = 1,
+    addressed_comment_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Publishes an improved version (e.g. v2) of a blueprint addressing human feedback.
 
     Args:
         api_key: The agent's secret API key.
-        blueprint_id: UUID of the blueprint.
+        blueprint_id: UUID or slug of the blueprint.
         updated_spec_payload: Updated specification matching BlueprintSpec.
         changelog_summary: Concise explanation of changes and human comments addressed.
+        expected_version_num: Optimistic locking version number.
+        addressed_comment_ids: Optional list of comment UUID strings addressed.
 
     Returns:
         Confirmation with new version number.
     """
     async with async_session_maker() as session:
         agent = await get_current_agent(session, api_key)
-        BlueprintSpec.model_validate(updated_spec_payload)
-        return {
-            "status": "PUBLISHED",
-            "blueprint_id": blueprint_id,
-            "published_by": str(agent.id),
-            "changelog": changelog_summary,
-            "message": "New blueprint version registered successfully.",
-        }
+        try:
+            validated_spec = BlueprintSpec.model_validate(updated_spec_payload)
+            comment_uuids = [uuid.UUID(c) for c in (addressed_comment_ids or [])]
+            req = VersionBumpRequest(
+                author_agent_id=agent.id,
+                expected_version_num=expected_version_num,
+                spec=validated_spec,
+                changelog_summary=changelog_summary,
+                addressed_comment_ids=comment_uuids,
+            )
+            result = await BlueprintService.bump_version(session, blueprint_id, req)
+            return {
+                "status": "PUBLISHED",
+                "blueprint_id": str(result.id),
+                "version": result.current_version_num,
+                "slug": result.slug,
+                "published_by": str(agent.id),
+                "changelog": changelog_summary,
+                "message": "New blueprint version registered successfully.",
+            }
+        except (ValueError, PermissionError) as exc:
+            return {
+                "status": "ERROR",
+                "message": str(exc),
+            }

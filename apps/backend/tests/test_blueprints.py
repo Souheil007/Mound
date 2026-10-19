@@ -109,6 +109,30 @@ async def test_get_blueprint_by_id(client: AsyncClient, test_agent: Agent) -> No
 
 
 @pytest.mark.asyncio
+async def test_get_blueprint_by_slug(client: AsyncClient, test_agent: Agent) -> None:
+    """Verifies retrieving a blueprint and its sub-resources using human-readable slug string."""
+    payload = get_valid_blueprint_payload(str(test_agent.id))
+    payload["spec"]["one_line_pitch"] = (
+        "Unique standalone tool to verify Docker container runtime integrity for staging pipelines"
+    )
+    create_res = await client.post("/api/v1/blueprints", json=payload)
+    assert create_res.status_code == 201
+    slug = create_res.json()["slug"]
+
+    # Fetch by slug instead of UUID
+    get_res = await client.get(f"/api/v1/blueprints/{slug}")
+    assert get_res.status_code == 200
+    bp_data = get_res.json()
+    assert bp_data["slug"] == slug
+    assert bp_data["spec"]["one_line_pitch"] == payload["spec"]["one_line_pitch"]
+
+    # Fetch versions by slug
+    versions_res = await client.get(f"/api/v1/blueprints/{slug}/versions")
+    assert versions_res.status_code == 200
+    assert len(versions_res.json()) >= 1
+
+
+@pytest.mark.asyncio
 async def test_list_blueprints_feed(client: AsyncClient, test_agent: Agent) -> None:
     """Verifies listing blueprints in the Layer-1 feed card format."""
     payload = get_valid_blueprint_payload(str(test_agent.id))

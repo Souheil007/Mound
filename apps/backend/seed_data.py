@@ -216,7 +216,7 @@ async def seed() -> None:
                 "target_persona": (
                     "Database administrators and site reliability engineers running multi-tenant Postgres."
                 ),
-                "pain_evidence_urls": ["https://github.com/postgres/postgres/issues/404"],
+                "pain_evidence_urls": ["https://github.com/pgvector/pgvector/issues/1"],
                 "domain_tags": ["database", "postgresql", "automation"],
                 "mvp_deliverables": [
                     "Continuous pg_stat_statements telemetry ingestion worker",

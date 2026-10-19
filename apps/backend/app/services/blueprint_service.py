@@ -122,21 +122,56 @@ class BlueprintService:
         )
 
     @classmethod
-    async def get_blueprint_by_id(
+    async def resolve_blueprint_id(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
-    ) -> BlueprintDetailResponse | None:
-        """Retrieves a blueprint by its UUID along with its latest specification.
+        identifier: str | uuid.UUID,
+    ) -> uuid.UUID | None:
+        """Resolves a blueprint identifier (UUID, UUID string, or slug) to its database UUID.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: UUID of the target blueprint.
+            identifier: Target UUID, UUID string, or blueprint slug.
+
+        Returns:
+            The resolved blueprint UUID or None if not found.
+        """
+        if isinstance(identifier, uuid.UUID):
+            return identifier
+        id_str = str(identifier).strip()
+        try:
+            return uuid.UUID(id_str)
+        except ValueError:
+            stmt = select(Blueprint.id).where(Blueprint.slug == id_str)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_blueprint_by_id_or_slug(
+        cls,
+        session: AsyncSession,
+        identifier: str | uuid.UUID,
+    ) -> BlueprintDetailResponse | None:
+        """Retrieves a blueprint by its UUID or slug along with its latest specification.
+
+        Args:
+            session: Active SQLAlchemy async session.
+            identifier: Target UUID, UUID string, or blueprint slug.
 
         Returns:
             A BlueprintDetailResponse or None if not found.
         """
-        stmt = select(Blueprint).options(selectinload(Blueprint.versions)).where(Blueprint.id == blueprint_id)
+        stmt = select(Blueprint).options(selectinload(Blueprint.versions))
+        if isinstance(identifier, uuid.UUID):
+            stmt = stmt.where(Blueprint.id == identifier)
+        else:
+            id_str = str(identifier).strip()
+            try:
+                parsed_uuid = uuid.UUID(id_str)
+                stmt = stmt.where(Blueprint.id == parsed_uuid)
+            except ValueError:
+                stmt = stmt.where(Blueprint.slug == id_str)
+
         result = await session.execute(stmt)
         blueprint = result.scalar_one_or_none()
         if not blueprint:
@@ -157,6 +192,15 @@ class BlueprintService:
             created_at=blueprint.created_at,
             updated_at=blueprint.updated_at,
         )
+
+    @classmethod
+    async def get_blueprint_by_id(
+        cls,
+        session: AsyncSession,
+        blueprint_id: uuid.UUID | str,
+    ) -> BlueprintDetailResponse | None:
+        """Retrieves a blueprint by its UUID or slug along with its latest specification."""
+        return await cls.get_blueprint_by_id_or_slug(session, blueprint_id)
 
     @classmethod
     async def list_blueprints(
@@ -224,20 +268,24 @@ class BlueprintService:
     async def list_versions(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
     ) -> list[BlueprintVersionResponse]:
         """Retrieves full version history for a blueprint.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: UUID of the target blueprint.
+            blueprint_id: UUID or slug of the target blueprint.
 
         Returns:
             A list of BlueprintVersionResponse items ordered by version number.
         """
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            return []
+
         stmt = (
             select(BlueprintVersion)
-            .where(BlueprintVersion.blueprint_id == blueprint_id)
+            .where(BlueprintVersion.blueprint_id == resolved_id)
             .order_by(BlueprintVersion.version_num.asc())
         )
         result = await session.execute(stmt)
@@ -258,14 +306,14 @@ class BlueprintService:
     async def create_amendment(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
         request: AmendmentCreateRequest,
     ) -> AmendmentResponse:
         """Submits a new amendment (Spec PR) on an existing blueprint.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: UUID of the target blueprint.
+            blueprint_id: UUID or slug of the target blueprint.
             request: Amendment proposal payload.
 
         Returns:
@@ -274,7 +322,11 @@ class BlueprintService:
         Raises:
             ValueError: If blueprint or submitting agent does not exist.
         """
-        bp_stmt = select(Blueprint).where(Blueprint.id == blueprint_id)
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
+
+        bp_stmt = select(Blueprint).where(Blueprint.id == resolved_id)
         bp_res = await session.execute(bp_stmt)
         blueprint = bp_res.scalar_one_or_none()
         if not blueprint:
@@ -287,7 +339,7 @@ class BlueprintService:
             raise ValueError(f"Agent with ID '{request.agent_id}' does not exist.")
 
         amendment = BlueprintAmendment(
-            blueprint_id=blueprint_id,
+            blueprint_id=resolved_id,
             submitting_agent_id=request.agent_id,
             target_section=request.target_section,
             proposed_change=request.proposed_change,
@@ -313,20 +365,24 @@ class BlueprintService:
     async def list_amendments(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
     ) -> list[AmendmentResponse]:
         """Lists all amendments submitted for a blueprint.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: UUID of the target blueprint.
+            blueprint_id: UUID or slug of the target blueprint.
 
         Returns:
             List of AmendmentResponse records.
         """
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            return []
+
         stmt = (
             select(BlueprintAmendment)
-            .where(BlueprintAmendment.blueprint_id == blueprint_id)
+            .where(BlueprintAmendment.blueprint_id == resolved_id)
             .order_by(BlueprintAmendment.created_at.desc())
         )
         result = await session.execute(stmt)
@@ -349,14 +405,14 @@ class BlueprintService:
     async def accept_amendment(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
         amendment_id: uuid.UUID,
     ) -> AmendmentResponse:
         """Accepts an amendment and credits the author as a co-author on the blueprint.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: UUID of the target blueprint.
+            blueprint_id: UUID or slug of the target blueprint.
             amendment_id: UUID of the amendment to accept.
 
         Returns:
@@ -365,9 +421,13 @@ class BlueprintService:
         Raises:
             ValueError: If amendment or blueprint not found.
         """
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
+
         stmt = select(BlueprintAmendment).where(
             BlueprintAmendment.id == amendment_id,
-            BlueprintAmendment.blueprint_id == blueprint_id,
+            BlueprintAmendment.blueprint_id == resolved_id,
         )
         result = await session.execute(stmt)
         amendment = result.scalar_one_or_none()
@@ -376,7 +436,7 @@ class BlueprintService:
 
         amendment.status = AmendmentStatus.ACCEPTED
 
-        bp_stmt = select(Blueprint).where(Blueprint.id == blueprint_id)
+        bp_stmt = select(Blueprint).where(Blueprint.id == resolved_id)
         bp_res = await session.execute(bp_stmt)
         blueprint = bp_res.scalar_one()
 
@@ -403,14 +463,14 @@ class BlueprintService:
     async def vote_blueprint(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
         user_id: uuid.UUID,
     ) -> BlueprintVoteResponse:
         """Toggles upvote for a human user on a blueprint proposal.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: Target blueprint UUID.
+            blueprint_id: UUID or slug of the target blueprint.
             user_id: Authenticated user UUID.
 
         Returns:
@@ -424,7 +484,11 @@ class BlueprintService:
         if not user_res.scalar_one_or_none():
             raise ValueError(f"User with ID '{user_id}' does not exist.")
 
-        bp_stmt = select(Blueprint).where(Blueprint.id == blueprint_id)
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
+
+        bp_stmt = select(Blueprint).where(Blueprint.id == resolved_id)
         bp_res = await session.execute(bp_stmt)
         blueprint = bp_res.scalar_one_or_none()
         if not blueprint:
@@ -432,7 +496,7 @@ class BlueprintService:
 
         vote_stmt = select(BlueprintVote).where(
             BlueprintVote.user_id == user_id,
-            BlueprintVote.blueprint_id == blueprint_id,
+            BlueprintVote.blueprint_id == resolved_id,
         )
         vote_res = await session.execute(vote_stmt)
         existing_vote = vote_res.scalar_one_or_none()
@@ -442,7 +506,7 @@ class BlueprintService:
             blueprint.upvotes_count = max(0, blueprint.upvotes_count - 1)
             voted = False
         else:
-            vote = BlueprintVote(user_id=user_id, blueprint_id=blueprint_id)
+            vote = BlueprintVote(user_id=user_id, blueprint_id=resolved_id)
             session.add(vote)
             blueprint.upvotes_count += 1
             voted = True
@@ -462,14 +526,14 @@ class BlueprintService:
     async def create_comment(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
         request: CommentCreateRequest,
     ) -> CommentResponse:
         """Posts structured human critique on a blueprint.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: Target blueprint UUID.
+            blueprint_id: UUID or slug of the target blueprint.
             request: Comment payload with category and content.
 
         Returns:
@@ -483,14 +547,18 @@ class BlueprintService:
         if not user_res.scalar_one_or_none():
             raise ValueError(f"User with ID '{request.user_id}' does not exist.")
 
-        bp_stmt = select(Blueprint).where(Blueprint.id == blueprint_id)
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
+
+        bp_stmt = select(Blueprint).where(Blueprint.id == resolved_id)
         bp_res = await session.execute(bp_stmt)
         blueprint = bp_res.scalar_one_or_none()
         if not blueprint:
             raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
 
         comment = BlueprintComment(
-            blueprint_id=blueprint_id,
+            blueprint_id=resolved_id,
             user_id=request.user_id,
             category=request.category,
             content=request.content,
@@ -521,20 +589,24 @@ class BlueprintService:
     async def list_comments(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
     ) -> list[CommentResponse]:
         """Lists all comments for a blueprint ordered by upvotes and recency.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: Target blueprint UUID.
+            blueprint_id: UUID or slug of the target blueprint.
 
         Returns:
             A list of CommentResponse objects.
         """
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            return []
+
         stmt = (
             select(BlueprintComment)
-            .where(BlueprintComment.blueprint_id == blueprint_id)
+            .where(BlueprintComment.blueprint_id == resolved_id)
             .order_by(BlueprintComment.upvotes_count.desc(), BlueprintComment.created_at.desc())
         )
         result = await session.execute(stmt)
@@ -621,14 +693,14 @@ class BlueprintService:
     async def bump_version(
         cls,
         session: AsyncSession,
-        blueprint_id: uuid.UUID,
+        blueprint_id: uuid.UUID | str,
         request: VersionBumpRequest,
     ) -> BlueprintDetailResponse:
         """Publishes a new version snapshot of a blueprint specification.
 
         Args:
             session: Active SQLAlchemy async session.
-            blueprint_id: Target blueprint UUID.
+            blueprint_id: UUID or slug of the target blueprint.
             request: VersionBumpRequest with optimistic lock version and revised spec.
 
         Returns:
@@ -643,10 +715,14 @@ class BlueprintService:
         if not agent_res.scalar_one_or_none():
             raise ValueError(f"Agent with ID '{request.author_agent_id}' does not exist.")
 
+        resolved_id = await cls.resolve_blueprint_id(session, blueprint_id)
+        if not resolved_id:
+            raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
+
         bp_stmt = (
             select(Blueprint)
             .options(selectinload(Blueprint.versions))
-            .where(Blueprint.id == blueprint_id)
+            .where(Blueprint.id == resolved_id)
         )
         bp_res = await session.execute(bp_stmt)
         blueprint = bp_res.scalar_one_or_none()

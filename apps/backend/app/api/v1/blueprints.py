@@ -132,18 +132,18 @@ async def list_blueprints(
 
 
 @router.get(
-    "/{blueprint_id}",
+    "/{identifier}",
     response_model=BlueprintDetailResponse,
     summary="Get blueprint details and latest specification",
 )
 async def get_blueprint(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     session: AsyncSession = Depends(get_db_session),
 ) -> BlueprintDetailResponse:
-    """Retrieves full specification details for a single blueprint.
+    """Retrieves full specification details for a single blueprint by UUID or slug.
 
     Args:
-        blueprint_id: UUID of the blueprint.
+        identifier: UUID or slug of the blueprint.
         session: Injected database session.
 
     Returns:
@@ -152,51 +152,51 @@ async def get_blueprint(
     Raises:
         HTTPException: 404 if not found.
     """
-    bp = await BlueprintService.get_blueprint_by_id(session, blueprint_id)
+    bp = await BlueprintService.get_blueprint_by_id_or_slug(session, identifier)
     if not bp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Blueprint with ID '{blueprint_id}' not found.",
+            detail=f"Blueprint '{identifier}' not found.",
         )
     return bp
 
 
 @router.get(
-    "/{blueprint_id}/versions",
+    "/{identifier}/versions",
     response_model=list[BlueprintVersionResponse],
     summary="Get blueprint version history",
 )
 async def list_blueprint_versions(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[BlueprintVersionResponse]:
     """Retrieves all version snapshots and changelog summaries for a blueprint.
 
     Args:
-        blueprint_id: UUID of the blueprint.
+        identifier: UUID or slug of the blueprint.
         session: Injected database session.
 
     Returns:
         A list of version records in chronological order.
     """
-    return await BlueprintService.list_versions(session, blueprint_id)
+    return await BlueprintService.list_versions(session, identifier)
 
 
 @router.post(
-    "/{blueprint_id}/amendments",
+    "/{identifier}/amendments",
     response_model=AmendmentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Submit an amendment (Spec PR) on an existing blueprint",
 )
 async def create_amendment(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     request: AmendmentCreateRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> AmendmentResponse:
     """Submits a structured amendment proposal to modify an existing blueprint.
 
     Args:
-        blueprint_id: Target blueprint UUID.
+        identifier: Target blueprint UUID or slug.
         request: Amendment payload with agent ID, target section, proposed change, rationale.
         session: Injected database session.
 
@@ -224,7 +224,7 @@ async def create_amendment(
     )
 
     try:
-        return await BlueprintService.create_amendment(session, blueprint_id, request)
+        return await BlueprintService.create_amendment(session, identifier, request)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -233,40 +233,40 @@ async def create_amendment(
 
 
 @router.get(
-    "/{blueprint_id}/amendments",
+    "/{identifier}/amendments",
     response_model=list[AmendmentResponse],
     summary="List all amendments submitted for a blueprint",
 )
 async def list_amendments(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AmendmentResponse]:
     """Lists all amendments for a blueprint ordered by submission date.
 
     Args:
-        blueprint_id: UUID of the target blueprint.
+        identifier: UUID or slug of the target blueprint.
         session: Injected database session.
 
     Returns:
         List of AmendmentResponse objects.
     """
-    return await BlueprintService.list_amendments(session, blueprint_id)
+    return await BlueprintService.list_amendments(session, identifier)
 
 
 @router.post(
-    "/{blueprint_id}/amendments/{amendment_id}/accept",
+    "/{identifier}/amendments/{amendment_id}/accept",
     response_model=AmendmentResponse,
     summary="Accept an amendment and credit author as co-author",
 )
 async def accept_amendment(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     amendment_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
 ) -> AmendmentResponse:
     """Accepts an amendment and adds the submitting agent to co_author_agent_ids.
 
     Args:
-        blueprint_id: Target blueprint UUID.
+        identifier: Target blueprint UUID or slug.
         amendment_id: Amendment UUID to accept.
         session: Injected database session.
 
@@ -277,7 +277,7 @@ async def accept_amendment(
         HTTPException: 404 if amendment or blueprint not found.
     """
     try:
-        return await BlueprintService.accept_amendment(session, blueprint_id, amendment_id)
+        return await BlueprintService.accept_amendment(session, identifier, amendment_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -286,19 +286,19 @@ async def accept_amendment(
 
 
 @router.post(
-    "/{blueprint_id}/vote",
+    "/{identifier}/vote",
     response_model=BlueprintVoteResponse,
     summary="Toggle upvote on a blueprint",
 )
 async def vote_blueprint(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     request: BlueprintVoteRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> BlueprintVoteResponse:
     """Toggles human upvote for an authenticated user on a blueprint proposal.
 
     Args:
-        blueprint_id: UUID of the blueprint to upvote.
+        identifier: UUID or slug of the blueprint to upvote.
         request: Payload containing user_id.
         session: Injected database session.
 
@@ -306,7 +306,7 @@ async def vote_blueprint(
         BlueprintVoteResponse with updated vote count and state.
     """
     try:
-        return await BlueprintService.vote_blueprint(session, blueprint_id, request.user_id)
+        return await BlueprintService.vote_blueprint(session, identifier, request.user_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -315,20 +315,20 @@ async def vote_blueprint(
 
 
 @router.post(
-    "/{blueprint_id}/comments",
+    "/{identifier}/comments",
     response_model=CommentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Post structured critique on a blueprint",
 )
 async def create_comment(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     request: CommentCreateRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> CommentResponse:
     """Submits structured human feedback tagged with a critique category.
 
     Args:
-        blueprint_id: Target blueprint UUID.
+        identifier: Target blueprint UUID or slug.
         request: Comment payload with category and critique text.
         session: Injected database session.
 
@@ -336,7 +336,7 @@ async def create_comment(
         The created CommentResponse.
     """
     try:
-        return await BlueprintService.create_comment(session, blueprint_id, request)
+        return await BlueprintService.create_comment(session, identifier, request)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -345,33 +345,33 @@ async def create_comment(
 
 
 @router.get(
-    "/{blueprint_id}/comments",
+    "/{identifier}/comments",
     response_model=list[CommentResponse],
     summary="List critique comments for a blueprint",
 )
 async def list_comments(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     session: AsyncSession = Depends(get_db_session),
 ) -> list[CommentResponse]:
     """Retrieves all critique comments for a blueprint sorted by upvotes and date.
 
     Args:
-        blueprint_id: Target blueprint UUID.
+        identifier: Target blueprint UUID or slug.
         session: Injected database session.
 
     Returns:
         List of CommentResponse objects.
     """
-    return await BlueprintService.list_comments(session, blueprint_id)
+    return await BlueprintService.list_comments(session, identifier)
 
 
 @router.post(
-    "/{blueprint_id}/comments/{comment_id}/vote",
+    "/{identifier}/comments/{comment_id}/vote",
     response_model=CommentVoteResponse,
     summary="Toggle upvote on a critique comment",
 )
 async def vote_comment(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     comment_id: uuid.UUID,
     request: CommentVoteRequest,
     session: AsyncSession = Depends(get_db_session),
@@ -379,7 +379,7 @@ async def vote_comment(
     """Toggles human upvote on a critique comment to elevate constructive feedback.
 
     Args:
-        blueprint_id: Target blueprint UUID.
+        identifier: Target blueprint UUID or slug.
         comment_id: Target comment UUID.
         request: Payload containing user_id.
         session: Injected database session.
@@ -397,20 +397,20 @@ async def vote_comment(
 
 
 @router.post(
-    "/{blueprint_id}/versions",
+    "/{identifier}/versions",
     response_model=BlueprintDetailResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Publish a revised blueprint version",
 )
 async def bump_version(
-    blueprint_id: uuid.UUID,
+    identifier: str,
     request: VersionBumpRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> BlueprintDetailResponse:
     """Publishes a new version of a blueprint spec, addressing human critiques with optimistic locking.
 
     Args:
-        blueprint_id: Target blueprint UUID.
+        identifier: Target blueprint UUID or slug.
         request: Revision payload with optimistic locking version and revised spec.
         session: Injected database session.
 
@@ -439,7 +439,7 @@ async def bump_version(
     )
 
     try:
-        return await BlueprintService.bump_version(session, blueprint_id, request)
+        return await BlueprintService.bump_version(session, identifier, request)
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
