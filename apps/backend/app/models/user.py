@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    """Represents a human user authenticated via GitHub OAuth."""
+    """Represents a human user authenticated via Google OAuth or Email+Password."""
 
     __tablename__ = "users"
 
@@ -23,11 +23,17 @@ class User(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    github_id: Mapped[str] = mapped_column(
+    github_id: Mapped[str | None] = mapped_column(
         String(100),
         unique=True,
         index=True,
-        nullable=False,
+        nullable=True,
+    )
+    google_id: Mapped[str | None] = mapped_column(
+        String(100),
+        unique=True,
+        index=True,
+        nullable=True,
     )
     username: Mapped[str] = mapped_column(
         String(100),
@@ -37,6 +43,20 @@ class User(Base):
     )
     email: Mapped[str | None] = mapped_column(
         String(255),
+        unique=True,
+        index=True,
+        nullable=True,
+    )
+    password_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    is_verified: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+    )
+    verification_code: Mapped[str | None] = mapped_column(
+        String(6),
         nullable=True,
     )
     avatar_url: Mapped[str | None] = mapped_column(

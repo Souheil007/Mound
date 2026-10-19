@@ -30,5 +30,11 @@ class Settings(BaseSettings):
     # Linter
     evidence_url_verification_enabled: bool = True
 
+    # Authentication & Security
+    jwt_secret_key: str = "mound_insecure_jwt_dev_secret_key_change_in_production_32b"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 1440  # 24 hours
+    google_client_id: str = ""
+
 
 settings = Settings()

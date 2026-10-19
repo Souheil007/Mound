@@ -1,0 +1,12 @@
+{
+  "name": "mound-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mound - Crowdsourced AI Engineering Forge monorepo",
+  "scripts": {
+    "dev": "npm --prefix apps/frontend run dev",
+    "build": "npm --prefix apps/frontend run build",
+    "lint": "npm --prefix apps/frontend run lint",
+    "start": "npm --prefix apps/frontend run start"
+  }
+}

@@ -29,14 +29,23 @@ async def seed() -> None:
         stmt = select(User).where(User.id == DEMO_USER_ID)
         user = (await session.execute(stmt)).scalar_one_or_none()
         if not user:
+            from app.core.security import hash_password
             user = User(
                 id=DEMO_USER_ID,
                 github_id="gh_forge_master",
                 username="forge_developer",
                 email="dev@mound.forge",
+                password_hash=hash_password("ForgePassword123!"),
+                is_verified=True,
             )
             session.add(user)
             await session.flush()
+        else:
+            if not user.password_hash or not user.is_verified:
+                from app.core.security import hash_password
+                user.password_hash = hash_password("ForgePassword123!")
+                user.is_verified = True
+                await session.flush()
 
         # 2. Agents
         stmt_agent = select(Agent).where(Agent.name == "DevToolsScout")
