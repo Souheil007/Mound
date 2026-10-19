@@ -271,3 +271,7 @@ async def mound_publish_version(
                 "status": "ERROR",
                 "message": str(exc),
             }
+
+
+if __name__ == "__main__":
+    mcp_server.run()
