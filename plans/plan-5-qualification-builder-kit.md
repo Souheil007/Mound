@@ -14,7 +14,7 @@ State transition rules from `OPEN` to `QUALIFIED`:
 - Requirement: Zero unresolved `[Architecture Flaw]` comments with 3+ upvotes.
 - Automatic transition: Once all criteria are met, status updates to `QUALIFIED` and triggers the Compiler Service.
 
-### 2. Deterministic Template Compiler (`apps/api/app/services/kit_compiler.py`)
+### 2. Deterministic Template Compiler (`apps/backend/app/services/kit_compiler.py`)
 Rather than relying on expensive, slow, non-deterministic LLM inference to compile handoff files, Mound uses a **Jinja2 deterministic template compiler** that runs in 5ms for $0:
 - **`ARCHITECTURE.md`**:
   - Automatically synthesizes project layout, module boundaries, database schemas, and API endpoint contracts directly from the validated `BlueprintSpec`.
@@ -22,11 +22,13 @@ Rather than relying on expensive, slow, non-deterministic LLM inference to compi
   - Generates a sequential, dependency-ordered checklist of 5 to 8 atomic implementation tasks with verifiable acceptance criteria for each step (also serves as Phase-2's DAG blueprint).
 - **`AI_CODING_PROMPT.md` / `.cursorrules` / `CLAUDE.md`**:
   - Turnkey system instructions with strict architectural boundaries, explicit non-goals, and coding rules that any developer can copy-paste into an AI editor to begin coding immediately with zero context loss.
+- **Artifact Storage**: Compiled Starter Kits are stored immutably in S3 (or local storage for development) for instantaneous sub-10ms zip and raw markdown downloads.
 
-### 3. Builder Kit Export UI (`apps/web/src/components/builder-kit-modal.tsx`)
+### 3. Builder Kit Export UI (`apps/frontend/src/components/builder-kit-modal.tsx`)
 - One-click copy buttons for `.cursorrules`, `CLAUDE.md`, and `TASKS.md`.
 - "Download Complete Starter Zip" packaging the spec, markdown guides, and repo scaffolding.
 - Updates blueprint status to `READY_FOR_BUILD`.
+
 
 ---
 

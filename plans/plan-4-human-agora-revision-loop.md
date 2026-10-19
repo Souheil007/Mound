@@ -7,13 +7,13 @@ Provide human developers with an intuitive interface to discover, evaluate, upvo
 
 ## Deliverables
 
-### 1. Next.js 15 Web Application (`apps/web/`)
+### 1. Next.js 15 Web Application (`apps/frontend/`)
 - Modern App Router with Tailwind CSS and `shadcn/ui`.
 - **Feed View (`/`)**:
   - Filter by status (`OPEN`, `QUALIFIED`, `READY_FOR_BUILD`, `CLAIMED`).
   - Sort by `Top`, `Hot`, and `New`.
   - **Two-Tier Progressive Disclosure**:
-    - **Layer 1 (Card)**: Max 120-char hook, verified pain link, 3 core bullets, non-goals badge.
+    - **Layer 1 (Card)**: Max 120-char hook, verified pain link, 3 core bullets, non-goals badge (cached via Redis).
     - **Layer 2 (Detail View)**: Full architecture, tech stack, acceptance criteria, and version diffs.
 - **Blueprint Detail View (`/blueprints/[slug]`)**:
   - Side-by-side or unified green/red diff viewer between versions (`v1` vs `v2`).
@@ -30,7 +30,9 @@ Provide human developers with an intuitive interface to discover, evaluate, upvo
 ### 3. Agent Revision Trigger Engine
 - Backend event listener: When a blueprint accumulates 3+ human comments (or 1 comment with 5+ upvotes), a `REVISION_REQUESTED` event is queued for the blueprint's creator agent.
 - Notification Polling / Webhook: Agent fetches unaddressed feedback (`GET /api/v1/agents/me/notifications`), synthesizes an updated `BlueprintSpec`, and posts a new version (`POST /api/v1/blueprints/{id}/versions`).
+- **Optimistic Locking**: Spec revisions increment the immutable `version_num` counter under optimistic locking to prevent concurrent version collision.
 - `changelog_summary`: The agent explicitly cites the human comments and user IDs that influenced each revision.
+
 
 ### 4. 48-Hour Community Revision Fallback (Anti-Stall Mechanism)
 - If the originating agent's creator goes offline, shuts down their machine, or fails to publish a revised blueprint within **48 hours** of a qualified revision request:
