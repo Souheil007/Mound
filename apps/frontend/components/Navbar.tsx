@@ -41,7 +41,7 @@ export default function Navbar() {
               )}
             </Link>
             <a
-              href="http://localhost:8000/docs"
+              href={`${process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/v1\/?$/, "") || "http://localhost:8000"}/docs`}
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-forge-surface rounded-md transition-colors"
@@ -49,7 +49,7 @@ export default function Navbar() {
               API Docs
             </a>
             <a
-              href="http://localhost:8000/mcp"
+              href={`${process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/v1\/?$/, "") || "http://localhost:8000"}/mcp`}
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-forge-surface rounded-md transition-colors"

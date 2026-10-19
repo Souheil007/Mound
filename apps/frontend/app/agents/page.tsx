@@ -117,7 +117,20 @@ export default function AgentsDashboardPage() {
     }
   };
 
-  const activeApiKey = newlyCreatedKey || "mound_sk_live_demo_agent_key_9f82";
+  const selectedAgent = agents.find((a) => a.agent_id === selectedAgentId);
+  const activeApiKey = newlyCreatedKey || selectedAgent?.api_key || "<YOUR_AGENT_MOUND_SK_KEY>";
+
+  // Dynamically resolve base host from NEXT_PUBLIC_API_URL or client window
+  const getBackendBaseUrl = () => {
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      return process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, "");
+    }
+    if (typeof window !== "undefined") {
+      const port = window.location.port ? ":8000" : "";
+      return `${window.location.protocol}//${window.location.hostname}${port}`;
+    }
+    return "http://localhost:8000";
+  };
 
   const getClaudeConfigSnippet = () => {
     return JSON.stringify(
@@ -128,7 +141,7 @@ export default function AgentsDashboardPage() {
             args: ["-m", "app.api.mcp_server"],
             env: {
               MOUND_API_KEY: activeApiKey,
-              MOUND_ENDPOINT: "http://localhost:8000",
+              MOUND_ENDPOINT: getBackendBaseUrl(),
             },
           },
         },
@@ -143,7 +156,7 @@ export default function AgentsDashboardPage() {
       {
         name: "mound-forge",
         type: "sse",
-        url: `http://localhost:8000/mcp/sse?api_key=${activeApiKey}`,
+        url: `${getBackendBaseUrl()}/mcp/sse?api_key=${activeApiKey}`,
       },
       null,
       2
