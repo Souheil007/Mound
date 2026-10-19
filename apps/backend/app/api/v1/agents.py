@@ -12,6 +12,7 @@ from app.core.database import get_db_session
 from app.core.rate_limit import RateLimiter
 from app.core.security import generate_agent_api_key, get_current_agent
 from app.models.agent import Agent
+from app.models.blueprint import Blueprint
 from app.models.user import User
 from app.schemas.blueprint_api import AgentNotificationsResponse, BlueprintCreateRequest
 from app.schemas.blueprint_spec import BlueprintSpec, SuggestedStack
@@ -71,6 +72,92 @@ class AgentProfileResponse(BaseModel):
     trust_tier: int
     daily_post_quota: int
     daily_amend_quota: int
+
+
+class ScoutStatusResponse(BaseModel):
+    """Operational telemetry and yield metrics for an autonomous discovery scout."""
+
+    agent_id: uuid.UUID
+    name: str
+    platform: str
+    description: str
+    source_description: str
+    window_hours: int
+    schedule: str
+    rubric_threshold: int
+    status: str
+    blueprints_count: int
+    specialty_tags: list[str]
+    last_active_at: str | None = None
+
+
+@router.get(
+    "/scouts/status",
+    response_model=list[ScoutStatusResponse],
+    summary="Get operational status and telemetry for autonomous discovery scouts",
+)
+async def get_scouts_status(
+    session: AsyncSession = Depends(get_db_session),
+) -> list[ScoutStatusResponse]:
+    """Retrieves operational telemetry, filter policies, and blueprint yield for the 3 autonomous platform scouts."""
+    from app.tasks.scout_orchestrator import ensure_scout_agents_exist
+    from app.scouts.models import PlatformSource
+    from sqlalchemy import func
+
+    scout_map = await ensure_scout_agents_exist()
+
+    meta = {
+        PlatformSource.HACKERNEWS: {
+            "platform": "Hacker News",
+            "source_description": "Algolia live date stream (stories & comments)",
+        },
+        PlatformSource.REDDIT: {
+            "platform": "Reddit",
+            "source_description": "r/SaaS, r/devops, r/programming (/new discussions)",
+        },
+        PlatformSource.GITHUB: {
+            "platform": "GitHub",
+            "source_description": "OSS issue backlogs & recent discussion comments",
+        },
+    }
+
+    results: list[ScoutStatusResponse] = []
+    for platform, agent in scout_map.items():
+        p_meta = meta.get(
+            platform,
+            {"platform": platform.value, "source_description": "Public developer discussions"},
+        )
+        # Count blueprints authored
+        bp_count_stmt = select(func.count(Blueprint.id)).where(Blueprint.creator_agent_id == agent.id)
+        bp_count = (await session.execute(bp_count_stmt)).scalar_one() or 0
+
+        # Latest blueprint created_at
+        last_stmt = (
+            select(Blueprint.created_at)
+            .where(Blueprint.creator_agent_id == agent.id)
+            .order_by(Blueprint.created_at.desc())
+            .limit(1)
+        )
+        last_created = (await session.execute(last_stmt)).scalar_one_or_none()
+
+        results.append(
+            ScoutStatusResponse(
+                agent_id=agent.id,
+                name=agent.name,
+                platform=p_meta["platform"],
+                description=agent.description or "Autonomous pain scout",
+                source_description=p_meta["source_description"],
+                window_hours=2,
+                schedule="Every 2 hours",
+                rubric_threshold=75,
+                status="ACTIVE",
+                blueprints_count=bp_count,
+                specialty_tags=agent.specialty_tags or [],
+                last_active_at=last_created.isoformat() if last_created else None,
+            )
+        )
+
+    return results
 
 
 @router.post(

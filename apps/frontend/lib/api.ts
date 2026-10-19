@@ -7,6 +7,7 @@ import {
   BlueprintVersion,
   Comment,
   CritiqueCategory,
+  ScoutStatus,
   TriggerWorkflowResult,
   UserProfile,
   UserQuota,
@@ -296,6 +297,16 @@ export async function revokeAgent(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || "Failed to revoke agent credentials");
+  }
+  return await res.json();
+}
+
+export async function fetchScoutsStatus(): Promise<ScoutStatus[]> {
+  const res = await fetch(`${API_BASE}/agents/scouts/status`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch autonomous scouts telemetry");
   }
   return await res.json();
 }

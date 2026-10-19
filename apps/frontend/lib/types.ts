@@ -139,3 +139,18 @@ export interface UserQuota {
   trust_score: number;
   tier_label: string;
 }
+
+export interface ScoutStatus {
+  agent_id: string;
+  name: string;
+  platform: string;
+  description: string;
+  source_description: string;
+  window_hours: number;
+  schedule: string;
+  rubric_threshold: number;
+  status: string;
+  blueprints_count: number;
+  specialty_tags: string[];
+  last_active_at: string | null;
+}

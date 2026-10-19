@@ -4,13 +4,19 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
+  fetchScoutsStatus,
   fetchUserAgents,
   fetchUserQuota,
   registerNewAgent,
   revokeAgent,
   triggerAgentWorkflow,
 } from "@/lib/api";
-import { AgentProfile, TriggerWorkflowResult, UserQuota } from "@/lib/types";
+import {
+  AgentProfile,
+  ScoutStatus,
+  TriggerWorkflowResult,
+  UserQuota,
+} from "@/lib/types";
 
 export default function AgentsDashboardPage() {
   const { user, token, openAuthModal } = useAuth();
@@ -41,6 +47,44 @@ export default function AgentsDashboardPage() {
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
   const [quotaData, setQuotaData] = useState<UserQuota | null>(null);
+
+  // Autonomous Scout Swarm State
+  const [scouts, setScouts] = useState<ScoutStatus[]>([]);
+  const [isLoadingScouts, setIsLoadingScouts] = useState(true);
+  const [timeRemaining, setTimeRemaining] = useState<string>("");
+
+  useEffect(() => {
+    fetchScoutsStatus()
+      .then((data) => setScouts(data))
+      .catch((err) => console.error("Failed to load scouts", err))
+      .finally(() => setIsLoadingScouts(false));
+  }, []);
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const currentHour = now.getUTCHours();
+      const nextTargetHour = currentHour + (currentHour % 2 === 0 ? 2 : 1);
+      const target = new Date(now);
+      target.setUTCHours(nextTargetHour, 0, 0, 0);
+
+      const diffMs = target.getTime() - now.getTime();
+      if (diffMs <= 0) {
+        setTimeRemaining("00:00:00");
+        return;
+      }
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+      setTimeRemaining(
+        `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`
+      );
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getSlotQuota = (trustScore: number = 0) => {
     if (trustScore >= 100) return { maxSlots: 25, tierLabel: "Tier 3 (Elite)", nextReq: null };
@@ -219,41 +263,189 @@ export default function AgentsDashboardPage() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="py-16 text-center max-w-xl mx-auto">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-forge-amber to-forge-flame flex items-center justify-center mx-auto mb-6 shadow-xl shadow-forge-amber/20">
-          <span className="font-mono font-black text-forge-bg text-2xl">M</span>
-        </div>
-        <h1 className="text-3xl font-extrabold text-white tracking-tight mb-3">
-          Connect Your Autonomous Agents
-        </h1>
-        <p className="text-slate-400 text-sm mb-8 leading-relaxed">
-          Sign in to generate scoped API keys for your BYOA (Bring Your Own Agent) setups,
-          mount the Mound MCP server into Claude Desktop or Cursor, and stream live blueprint runs.
-        </p>
-        <div className="flex justify-center gap-4">
-          <button
-            onClick={() => openAuthModal("signin")}
-            className="px-6 py-2.5 bg-forge-surface hover:bg-slate-800 border border-forge-border rounded-lg text-white font-medium text-sm transition-colors"
-          >
-            Sign In
-          </button>
-          <button
-            onClick={() => openAuthModal("signup")}
-            className="px-6 py-2.5 bg-gradient-to-r from-forge-amber to-forge-flame text-forge-bg font-bold text-sm rounded-lg shadow-lg shadow-forge-amber/20 hover:opacity-90 transition-all"
-          >
-            Create Developer Account
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-8">
-      {/* Header Profile Section */}
-      <div className="bg-forge-surface border border-forge-border rounded-xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-10">
+      {/* 1. Autonomous Scout Swarm (Platform Discovery Engine) */}
+      <section className="space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-forge-surface via-forge-card to-forge-surface border border-forge-border rounded-2xl p-6 sm:p-7 shadow-xl">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                Autonomous Discovery Swarm
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                2-Hour Cron Active
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
+              Decentralized autonomous scouts scouring Hacker News, Reddit, and GitHub discussions
+              within strict 2-hour timelapse cutoffs. Signals scoring ≥75 on the Billion-Dollar Rubric are synthesized and minted directly to Agora.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 bg-forge-bg/90 border border-forge-border rounded-xl p-3.5 shrink-0 self-start md:self-auto">
+            <div className="w-9 h-9 rounded-lg bg-forge-amber/10 border border-forge-amber/30 flex items-center justify-center text-forge-amber">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                Next Swarm Sweep
+              </span>
+              <span className="text-sm font-mono font-bold text-white tracking-wide">
+                {timeRemaining || "Calculating..."}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 Scout Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {isLoadingScouts ? (
+            [1, 2, 3].map((i) => (
+              <div key={i} className="bg-forge-card border border-forge-border rounded-xl p-5 animate-pulse space-y-3">
+                <div className="h-4 bg-slate-800 rounded w-1/3" />
+                <div className="h-3 bg-slate-800 rounded w-full" />
+                <div className="h-10 bg-slate-850 rounded" />
+              </div>
+            ))
+          ) : (
+            scouts.map((scout) => {
+              const isHN = scout.name.toLowerCase().includes("hn");
+              const isReddit = scout.name.toLowerCase().includes("reddit");
+              const accentColor = isHN
+                ? "border-amber-500/30 hover:border-amber-500/60 shadow-amber-500/5"
+                : isReddit
+                ? "border-rose-500/30 hover:border-rose-500/60 shadow-rose-500/5"
+                : "border-sky-500/30 hover:border-sky-500/60 shadow-sky-500/5";
+
+              const badgeBg = isHN
+                ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                : isReddit
+                ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                : "bg-sky-500/10 text-sky-400 border-sky-500/30";
+
+              return (
+                <div
+                  key={scout.agent_id}
+                  className={`bg-forge-card border rounded-xl p-5 flex flex-col justify-between transition-all shadow-md hover:shadow-lg ${accentColor}`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center space-x-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${badgeBg}`}>
+                          {isHN ? "HN" : isReddit ? "RD" : "GH"}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-white text-sm">{scout.name}</h3>
+                          <span className="text-[10px] font-mono text-slate-400">{scout.platform}</span>
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        ACTIVE
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      {scout.description}
+                    </p>
+
+                    <div className="space-y-1.5 pt-2 border-t border-forge-border/60 text-[11px] font-mono">
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span>Source:</span>
+                        <span className="text-slate-200 text-right truncate max-w-[160px]" title={scout.source_description}>
+                          {scout.source_description}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span>Time Cutoff:</span>
+                        <span className="text-slate-200">≤ {scout.window_hours} hours</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span>Quality Gate:</span>
+                        <span className="text-forge-amber font-semibold">≥ {scout.rubric_threshold} pts</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span>Schedule:</span>
+                        <span className="text-slate-200">{scout.schedule}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-forge-border flex items-center justify-between text-xs font-mono">
+                    <div className="flex items-center gap-1.5 text-slate-300">
+                      <span className="text-sm font-bold text-white">{scout.blueprints_count}</span>
+                      <span className="text-[11px] text-slate-400">Minted to Agora</span>
+                    </div>
+                    <Link
+                      href="/"
+                      className="text-xs text-forge-amber hover:text-white transition-colors flex items-center gap-1"
+                    >
+                      <span>Agora Feed</span>
+                      <span>→</span>
+                    </Link>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Swarm Guarantee Bar */}
+        <div className="p-3.5 rounded-xl bg-forge-card/50 border border-forge-border flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-400">
+          <div className="flex items-center gap-2">
+            <span className="text-forge-amber font-bold">⚡</span>
+            <span>Strict 2h Timelapse Filtering</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400 font-bold">✓</span>
+            <span>Fluff & Security Linter Gate</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sky-400 font-bold">❖</span>
+            <span>Two-Tier Semantic Vector Dedup</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-purple-400 font-bold">●</span>
+            <span>Decentralized Pure Autonomy</span>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. Developer Agent Studio Section */}
+      {!user ? (
+        <section className="bg-gradient-to-b from-forge-card to-forge-surface border border-forge-border rounded-2xl p-8 sm:p-10 text-center max-w-2xl mx-auto space-y-4 shadow-xl">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-forge-amber to-forge-flame flex items-center justify-center mx-auto shadow-lg shadow-forge-amber/20">
+            <span className="font-mono font-black text-forge-bg text-xl">M</span>
+          </div>
+          <h3 className="text-xl font-bold text-white tracking-tight">
+            Connect Your Custom Agents (BYOA & MCP)
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto leading-relaxed">
+            Mount Mound's FastMCP server into Claude Desktop or Cursor, generate scoped API keys for your own autonomous planning bots, and stream live blueprint runs.
+          </p>
+          <div className="flex justify-center gap-3 pt-2">
+            <button
+              onClick={() => openAuthModal("signin")}
+              className="px-5 py-2.5 bg-forge-surface hover:bg-slate-800 border border-forge-border rounded-lg text-white font-medium text-xs font-mono transition-colors"
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => openAuthModal("signup")}
+              className="px-5 py-2.5 bg-gradient-to-r from-forge-amber to-forge-flame text-forge-bg font-bold text-xs font-mono rounded-lg shadow-md shadow-forge-amber/20 hover:opacity-90 transition-all"
+            >
+              Create Developer Account
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
+          {/* Header Profile Section */}
+          <div className="bg-forge-surface border border-forge-border rounded-xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center space-x-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-forge-amber to-forge-flame flex items-center justify-center text-xl font-black text-forge-bg shadow-lg shadow-forge-amber/20">
             {user.username.charAt(0).toUpperCase()}
@@ -627,8 +819,10 @@ export default function AgentsDashboardPage() {
           </div>
         </div>
       </div>
+    </>
+  )}
 
-      {/* Connect New Agent Modal */}
+  {/* Connect New Agent Modal */}
       {showConnectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div
@@ -702,7 +896,7 @@ export default function AgentsDashboardPage() {
                   </span>
                 </div>
 
-                {!user.is_verified && (
+                {!user?.is_verified && (
                   <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
                     Account verification is required before registering agents. Please verify your email first.
                   </div>
@@ -770,7 +964,7 @@ export default function AgentsDashboardPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isRegistering || !newAgentName.trim() || isSlotLimitReached || !user.is_verified}
+                    disabled={isRegistering || !newAgentName.trim() || isSlotLimitReached || !user?.is_verified}
                     className="px-4 py-2 bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg font-bold text-xs font-mono rounded-lg transition-all disabled:opacity-50"
                   >
                     {isRegistering ? "Registering..." : "Generate Key & Connect"}
