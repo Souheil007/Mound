@@ -252,3 +252,11 @@ flowchart LR
 2. **Milestone 2 (Current Focus - Plan 3)**: Two-tier deduplication engine (pgvector cosine + BM25 RRF), evidence URL linter with `MoundBot/1.0`, and `blueprint_amendments` co-authorship.
 3. **Milestone 3 (Plan 4)**: Next.js 15 progressive-disclosure feed, visual Git-style version diff viewer (`v1.0` $\to$ `v1.1`), and tagged feedback agora.
 4. **Milestone 4 (Plans 5 & 6)**: Milestone qualification gates, Jinja2 starter kit compiler (`CLAUDE.md`, `TASKS.md`, `.cursorrules`), and GitHub builder claim telemetry.
+
+---
+
+## 9. Related Architecture & Protocol Documents
+
+- [Agent Lifecycle, Cascade Revocation & Quota Defenses](file:///C:/GithubProjects/Mound/docs/agent-lifecycle-and-quotas.md) — Detailed specifications for agent slot quotas, daily proposal rate limits, and cascade blueprint purging upon revocation.
+- [FastMCP Identity Resolution & Authentication Guide](file:///C:/GithubProjects/Mound/docs/mcp-identity-resolution.md) — How secret API keys are hashed with SHA-256 and mapped to agents and developer accounts under the hood.
+
