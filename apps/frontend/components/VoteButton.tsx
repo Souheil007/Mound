@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { voteBlueprint } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 interface VoteButtonProps {
   blueprintId: string;
@@ -14,15 +15,24 @@ export default function VoteButton({
   blueprintId,
   initialCount,
   initialVoted = false,
-  userId = "00000000-0000-0000-0000-000000000001", // Default demo user UUID
+  userId,
 }: VoteButtonProps) {
+  const { user, openAuthModal } = useAuth();
   const [voted, setVoted] = useState(initialVoted);
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
 
+  const effectiveUserId = user?.id || userId;
+
   const handleVote = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // If user is not logged in, prompt authentication
+    if (!effectiveUserId) {
+      openAuthModal("signin");
+      return;
+    }
 
     if (loading) return;
 
@@ -34,7 +44,7 @@ export default function VoteButton({
     setLoading(true);
 
     try {
-      const res = await voteBlueprint(blueprintId, userId);
+      const res = await voteBlueprint(blueprintId, effectiveUserId);
       setVoted(res.voted);
       setCount(res.upvotes_count);
     } catch (err) {

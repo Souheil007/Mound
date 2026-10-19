@@ -85,7 +85,10 @@ export async function voteBlueprint(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id: userId }),
   });
-  if (!res.ok) throw new Error("Failed to vote blueprint");
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.detail || `Failed to vote blueprint (HTTP ${res.status})`);
+  }
   return await res.json();
 }
 

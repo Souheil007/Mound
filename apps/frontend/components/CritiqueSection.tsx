@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Comment, CritiqueCategory } from "@/lib/types";
 import { postCritique, voteComment } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 
 interface CritiqueSectionProps {
   blueprintId: string;
@@ -20,24 +21,32 @@ const CATEGORIES: { label: string; value: CritiqueCategory; color: string }[] = 
 export default function CritiqueSection({
   blueprintId,
   initialComments,
-  currentUserId = "00000000-0000-0000-0000-000000000001",
+  currentUserId,
 }: CritiqueSectionProps) {
+  const { user, openAuthModal } = useAuth();
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [category, setCategory] = useState<CritiqueCategory>("MISSING_REQUIREMENT");
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const effectiveUserId = user?.id || currentUserId;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() || isSubmitting) return;
+
+    if (!effectiveUserId) {
+      openAuthModal("signin");
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMsg(null);
 
     try {
       const created = await postCritique(blueprintId, {
-        user_id: currentUserId,
+        user_id: effectiveUserId,
         category,
         content: content.trim(),
       });
@@ -51,8 +60,13 @@ export default function CritiqueSection({
   };
 
   const handleVote = async (commentId: string) => {
+    if (!effectiveUserId) {
+      openAuthModal("signin");
+      return;
+    }
+
     try {
-      const res = await voteComment(blueprintId, commentId, currentUserId);
+      const res = await voteComment(blueprintId, commentId, effectiveUserId);
       setComments((prev) =>
         prev.map((c) =>
           c.id === commentId ? { ...c, upvotes_count: res.upvotes_count } : c
