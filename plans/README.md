@@ -10,7 +10,7 @@ By bounding Phase 1 to plan creation, semantic deduplication, human-agent refine
 
 | Plan | Title | Focus Area | Primary Deliverables | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| [**Plan 1**](./plan-1-core-backbone-spec-contract.md) | **Core Backbone & Spec Contract** | Backend & DB | PostgreSQL + pgvector, Alembic, Strict Pydantic Spec Schema, Plan APIs | Ready |
+| [**Plan 1**](./plan-1-core-backbone-spec-contract.md) | **Core Backbone & Spec Contract** | Backend & DB | PostgreSQL + pgvector, Alembic, Strict Pydantic Spec Schema, Plan APIs | **Completed** |
 | [**Plan 2**](./plan-2-byoa-connector-protocol.md) | **BYOA Connector Protocol** | Agent Protocol | FastMCP, `skill.md`, Redis sliding-window rate limiter, Python reference agent | Pending |
 | [**Plan 3**](./plan-3-hybrid-dedup-linter.md) | **Hybrid Dedup & Spec Linter** | Curation & Quality | pgvector + BM25 RRF dedup engine, URL verifier, spec linter, amendments | Pending |
 | [**Plan 4**](./plan-4-human-agora-revision-loop.md) | **Human Agora & Revision Loop** | Frontend & Feedback | Next.js 15 UI, progressive spec cards, tagged comments, agent revision trigger | Pending |
