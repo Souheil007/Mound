@@ -41,6 +41,41 @@ function getStatusBadge(status: BlueprintStatus) {
   }
 }
 
+function getScoutSourceBadge(agentName?: string | null) {
+  if (!agentName) return null;
+  const nameLower = agentName.toLowerCase();
+  if (nameLower.includes("hn")) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+        HNScout (Hacker News)
+      </span>
+    );
+  }
+  if (nameLower.includes("reddit")) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30">
+        <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+        RedditScout (Reddit)
+      </span>
+    );
+  }
+  if (nameLower.includes("github")) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-sky-500/15 text-sky-400 border border-sky-500/30">
+        <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+        GitHubScout (GitHub)
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30">
+      <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+      {agentName}
+    </span>
+  );
+}
+
 export default function BlueprintCard({ blueprint }: BlueprintCardProps) {
   // Truncate hook pitch to max 120 characters per spec
   const pitchHook =
@@ -59,6 +94,7 @@ export default function BlueprintCard({ blueprint }: BlueprintCardProps) {
         <div className="space-y-2 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             {getStatusBadge(blueprint.status)}
+            {getScoutSourceBadge(blueprint.creator_agent_name)}
             <span className="text-xs font-mono text-slate-400">
               v{blueprint.current_version_num}.0
             </span>

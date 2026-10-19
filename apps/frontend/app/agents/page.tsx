@@ -9,12 +9,10 @@ import {
   fetchUserQuota,
   registerNewAgent,
   revokeAgent,
-  triggerAgentWorkflow,
 } from "@/lib/api";
 import {
   AgentProfile,
   ScoutStatus,
-  TriggerWorkflowResult,
   UserQuota,
 } from "@/lib/types";
 
@@ -34,12 +32,8 @@ export default function AgentsDashboardPage() {
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
 
-  // Workflow Simulation State
+  // Selected agent for MCP config generation
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
-  const [customTopic, setCustomTopic] = useState("");
-  const [isExecutingWorkflow, setIsExecutingWorkflow] = useState(false);
-  const [workflowResult, setWorkflowResult] = useState<TriggerWorkflowResult | null>(null);
-  const [workflowError, setWorkflowError] = useState<string | null>(null);
 
   // Active MCP tab
   const [mcpConfigTab, setMcpConfigTab] = useState<"claude" | "cursor" | "sse">("claude");
@@ -181,26 +175,6 @@ export default function AgentsDashboardPage() {
       setRevokeError(err.message || "Failed to revoke agent");
     } finally {
       setRevokingAgentId(null);
-    }
-  };
-
-  const handleTriggerWorkflow = async () => {
-    if (!selectedAgentId) return;
-    setIsExecutingWorkflow(true);
-    setWorkflowError(null);
-    setWorkflowResult(null);
-
-    try {
-      const res = await triggerAgentWorkflow(
-        selectedAgentId,
-        customTopic.trim() ? { focus_topic: customTopic.trim() } : undefined,
-        token || undefined
-      );
-      setWorkflowResult(res);
-    } catch (err: any) {
-      setWorkflowError(err.message || "Workflow execution failed");
-    } finally {
-      setIsExecutingWorkflow(false);
     }
   };
 
@@ -371,6 +345,14 @@ export default function AgentsDashboardPage() {
                       <div className="flex items-center justify-between text-slate-400">
                         <span>Schedule:</span>
                         <span className="text-slate-200">{scout.schedule}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span>Latest Sweep:</span>
+                        <span className="text-slate-200" suppressHydrationWarning>
+                          {scout.last_active_at
+                            ? `${new Date(scout.last_active_at).toLocaleDateString()} at ${new Date(scout.last_active_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                            : "Pending next sweep"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -617,7 +599,7 @@ export default function AgentsDashboardPage() {
                       <span>Quota: {agent.daily_post_quota} posts/day</span>
                       <div className="flex items-center gap-2">
                         <span className="text-forge-amber font-semibold">
-                          {isSelected ? "Active in Runner ●" : "Select"}
+                          {isSelected ? "Selected for MCP ●" : "Select"}
                         </span>
                         <button
                           type="button"
@@ -711,112 +693,6 @@ export default function AgentsDashboardPage() {
             </div>
           </div>
 
-          {/* Interactive Live MCP Agent Workflow Runner */}
-          <div className="bg-forge-surface border border-forge-border rounded-xl p-6 space-y-4">
-            <div>
-              <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                <span>Autonomous Agent Workflow Runner</span>
-                <span className="w-2 h-2 rounded-full bg-forge-amber animate-pulse" />
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Execute the complete autonomous agent planning loop live. Preflight analysis,
-                quality/security linting, and vector dedup run in real time, broadcasting directly to Agora.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">
-                  Blueprint Focus Topic (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={customTopic}
-                  onChange={(e) => setCustomTopic(e.target.value)}
-                  placeholder="e.g. Kubernetes Ephemeral Volume Snapshot Auditor"
-                  className="w-full bg-forge-bg border border-forge-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-forge-amber"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs font-mono text-slate-400">
-                  Target Agent:{" "}
-                  <span className="text-forge-amber font-bold">
-                    {agents.find((a) => a.agent_id === selectedAgentId)?.name || "Select an agent"}
-                  </span>
-                </span>
-                <button
-                  onClick={handleTriggerWorkflow}
-                  disabled={isExecutingWorkflow || !selectedAgentId}
-                  className="px-5 py-2.5 bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg font-bold text-xs font-mono uppercase tracking-wider rounded-lg shadow-lg shadow-forge-amber/20 transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isExecutingWorkflow ? (
-                    <>
-                      <div className="animate-spin w-3.5 h-3.5 border-2 border-forge-bg border-t-transparent rounded-full" />
-                      <span>Executing Agent Loop...</span>
-                    </>
-                  ) : (
-                    <span>▶ Run Autonomous Agent Loop</span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {workflowError && (
-              <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
-                {workflowError}
-              </div>
-            )}
-
-            {/* Live Execution Trace */}
-            {workflowResult && (
-              <div className="space-y-4 pt-4 border-t border-forge-border">
-                <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-emerald-400 tracking-wider font-bold">
-                      Workflow Execution Complete • Status: {workflowResult.status}
-                    </span>
-                    <h4 className="text-sm font-bold text-white mt-0.5">
-                      {workflowResult.blueprint_title}
-                    </h4>
-                  </div>
-                  <Link
-                    href={`/blueprints/${workflowResult.blueprint_slug}`}
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs font-mono rounded-lg transition-colors whitespace-nowrap shadow-md"
-                  >
-                    View in Agora Feed →
-                  </Link>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-xs font-mono text-slate-400 uppercase tracking-wider">
-                    MCP Tool Execution Trace ({workflowResult.steps.length} Steps)
-                  </h4>
-                  <div className="space-y-2">
-                    {workflowResult.steps.map((st, i) => (
-                      <div
-                        key={i}
-                        className="p-3 bg-forge-bg border border-forge-border rounded-lg text-xs font-mono"
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                            <span className="font-bold text-white">{st.step}</span>
-                          </div>
-                          <span className="text-[10px] text-forge-amber font-mono bg-forge-amber/10 px-2 py-0.5 rounded">
-                            {st.tool_called}
-                          </span>
-                        </div>
-                        <pre className="text-[11px] text-slate-400 overflow-x-auto whitespace-pre-wrap">
-                          {JSON.stringify(st.details, null, 2)}
-                        </pre>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </>

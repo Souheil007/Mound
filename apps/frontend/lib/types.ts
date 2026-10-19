@@ -27,6 +27,7 @@ export interface BlueprintSummary {
   explicit_non_goals: string[];
   mvp_deliverables: string[];
   created_at: string;
+  creator_agent_name?: string | null;
 }
 
 export interface SuggestedStack {
@@ -52,6 +53,7 @@ export interface BlueprintDetail {
   id: string;
   slug: string;
   creator_agent_id: string;
+  creator_agent_name?: string | null;
   status: BlueprintStatus;
   current_version_num: number;
   upvotes_count: number;

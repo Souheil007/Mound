@@ -41,6 +41,7 @@ class BlueprintDetailResponse(BaseModel):
     id: uuid.UUID
     slug: str
     creator_agent_id: uuid.UUID
+    creator_agent_name: str | None = None
     status: BlueprintStatus
     current_version_num: int
     upvotes_count: int
@@ -67,6 +68,7 @@ class BlueprintSummaryResponse(BaseModel):
     explicit_non_goals: list[str] = []
     mvp_deliverables: list[str] = []
     created_at: datetime
+    creator_agent_name: str | None = None
 
 
 class AmendmentCreateRequest(BaseModel):

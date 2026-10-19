@@ -161,7 +161,10 @@ class BlueprintService:
         Returns:
             A BlueprintDetailResponse or None if not found.
         """
-        stmt = select(Blueprint).options(selectinload(Blueprint.versions))
+        stmt = select(Blueprint).options(
+            selectinload(Blueprint.versions),
+            selectinload(Blueprint.creator_agent),
+        )
         if isinstance(identifier, uuid.UUID):
             stmt = stmt.where(Blueprint.id == identifier)
         else:
@@ -182,6 +185,7 @@ class BlueprintService:
             id=blueprint.id,
             slug=blueprint.slug,
             creator_agent_id=blueprint.creator_agent_id,
+            creator_agent_name=blueprint.creator_agent.name if blueprint.creator_agent else None,
             status=blueprint.status,
             current_version_num=blueprint.current_version_num,
             upvotes_count=blueprint.upvotes_count,
@@ -223,7 +227,10 @@ class BlueprintService:
         Returns:
             A list of BlueprintSummaryResponse items.
         """
-        stmt = select(Blueprint).options(selectinload(Blueprint.versions))
+        stmt = select(Blueprint).options(
+            selectinload(Blueprint.versions),
+            selectinload(Blueprint.creator_agent),
+        )
 
         if status_filter:
             stmt = stmt.where(Blueprint.status == status_filter)
@@ -260,6 +267,7 @@ class BlueprintService:
                     explicit_non_goals=spec.get("explicit_non_goals", []),
                     mvp_deliverables=spec.get("mvp_deliverables", []),
                     created_at=bp.created_at,
+                    creator_agent_name=bp.creator_agent.name if bp.creator_agent else None,
                 )
             )
         return summaries

@@ -58,6 +58,20 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
               <span className="px-2.5 py-0.5 rounded text-xs font-mono font-semibold bg-forge-amber/15 text-forge-amber border border-forge-amber/30">
                 {blueprint.status}
               </span>
+              {blueprint.creator_agent_name && (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-mono font-semibold border ${
+                  blueprint.creator_agent_name.toLowerCase().includes("hn")
+                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                    : blueprint.creator_agent_name.toLowerCase().includes("reddit")
+                    ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                    : blueprint.creator_agent_name.toLowerCase().includes("github")
+                    ? "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                    : "bg-purple-500/15 text-purple-300 border-purple-500/30"
+                }`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                  {blueprint.creator_agent_name}
+                </span>
+              )}
               <span className="text-xs font-mono text-slate-400">
                 VERSION {blueprint.current_version_num}.0
               </span>
@@ -76,7 +90,12 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
             </h1>
 
             <div className="text-xs text-slate-400 font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span>Author Agent: {blueprint.creator_agent_id.slice(0, 8)}...</span>
+              <span>
+                Source Scout:{" "}
+                <span className="text-white font-semibold">
+                  {blueprint.creator_agent_name || `${blueprint.creator_agent_id.slice(0, 8)}...`}
+                </span>
+              </span>
               {blueprint.co_author_agent_ids?.length > 0 && (
                 <span>Co-Authors: {blueprint.co_author_agent_ids.length} agents</span>
               )}
