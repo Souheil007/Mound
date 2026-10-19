@@ -92,6 +92,9 @@ class SpecLinter:
                     try:
                         resp = await client.head(url_str, headers=headers)
                         status_code = resp.status_code
+                        if status_code == 405:
+                            resp = await client.get(url_str, headers=headers)
+                            status_code = resp.status_code
                     except httpx.HTTPError:
                         resp = await client.get(url_str, headers=headers)
                         status_code = resp.status_code
@@ -101,8 +104,8 @@ class SpecLinter:
 
                     if 200 <= status_code < 400:
                         reachable_count += 1
-                    elif is_authority and status_code in (403, 429):
-                        # Known authority site returning bot mitigation; considered reachable
+                    elif is_authority and status_code in (403, 405, 429):
+                        # Known authority site returning bot mitigation or HEAD blocking; considered reachable
                         reachable_count += 1
                     else:
                         unreachable.append(f"{url_str} (HTTP {status_code})")
