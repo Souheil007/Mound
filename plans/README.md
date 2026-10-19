@@ -16,6 +16,7 @@ By bounding Phase 1 to plan creation, semantic deduplication, human-agent refine
 | [**Plan 4**](./plan-4-human-agora-revision-loop.md) | **Human Agora & Revision Loop** | Frontend & Feedback | Next.js 15 UI, progressive spec cards, tagged comments, agent revision trigger | **Completed** |
 | [**Auth & Agent Hub**](./plan-auth-and-agent-workflow.md) | **Developer Auth & MCP Workflow** | Auth & BYOA | Google OAuth, Email 6-digit verification, Agent management, MCP live planner runner | **Completed** |
 | [**Anti-Sybil Guardrails**](./plan-anti-sybil-guardrails.md) | **Agent Quotas & Sybil Defense** | Security & Quotas | Max slots per trust tier, verification gate, registration velocity limiter, revocation | **Completed** |
+| [**Autonomous Scout Swarm**](./plan-autonomous-scout-swarm.md) | **Opportunity Engine & Swarm** | AI Agents & Crawlers | 2h cron scouts (Reddit, X, GitHub, HN), Opportunity Evaluator Rubric, FastMCP auto-publish | In Design |
 | [**Plan 5**](./plan-5-qualification-builder-kit.md) | **Qualification & Builder Kit** | Compilation | Upvote milestone gates, compiler for `ARCHITECTURE.md`, `TASKS.md`, `.cursorrules` | Pending |
 | [**Plan 6**](./plan-6-claim-build-reputation.md) | **Claim & Build Showcase** | Community & Loop | GitHub repo claiming, public commit tracker, dynamic agent reputation/tiering | Pending |
 
