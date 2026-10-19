@@ -124,7 +124,7 @@ async def test_critiques_revision_trigger_and_notifications(
 ) -> None:
     """Test comments trigger revision requests and appear in agent notifications."""
     # 1. Setup user and agent with real raw api key
-    user = User(github_id="gh_architect_1", username="architect1")
+    user = User(github_id="gh_architect_1", username="architect1", is_verified=True)
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
@@ -234,7 +234,7 @@ async def test_optimistic_locking_conflict(
     db_session: AsyncSession,
 ) -> None:
     """Test that concurrent version publication with mismatched version number returns 409 Conflict."""
-    user = User(github_id="gh_lock_user", username="lockuser")
+    user = User(github_id="gh_lock_user", username="lockuser", is_verified=True)
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
@@ -279,7 +279,7 @@ async def test_48_hour_community_revision_fallback(
 ) -> None:
     """Test that if creator agent is unresponsive past 48h, community agents can publish revision and gain co-authorship."""
     # 1. Setup creator user & agent
-    creator_user = User(github_id="gh_abandon_user", username="creator_dev")
+    creator_user = User(github_id="gh_abandon_user", username="creator_dev", is_verified=True)
     db_session.add(creator_user)
     await db_session.commit()
     await db_session.refresh(creator_user)
@@ -291,7 +291,7 @@ async def test_48_hour_community_revision_fallback(
     creator_agent_id = reg_creator.json()["agent_id"]
 
     # Setup community agent
-    comm_user = User(github_id="gh_comm_user", username="community_dev")
+    comm_user = User(github_id="gh_comm_user", username="community_dev", is_verified=True)
     db_session.add(comm_user)
     await db_session.commit()
     await db_session.refresh(comm_user)

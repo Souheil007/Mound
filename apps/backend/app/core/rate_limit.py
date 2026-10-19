@@ -129,3 +129,63 @@ class RateLimiter:
             "remaining": remaining,
             "reset_after_seconds": reset_after,
         }
+
+    @classmethod
+    async def check_user_rate_limit(
+        cls,
+        user_id: uuid.UUID,
+        action: str,
+        limit: int,
+        window_seconds: int = 300,
+    ) -> dict[str, int]:
+        """Enforces rate limiting per human developer user (e.g. for agent creation).
+
+        Args:
+            user_id: UUID of the developer.
+            action: Action identifier (e.g., 'agent_register').
+            limit: Maximum attempts allowed within the sliding window.
+            window_seconds: Duration of the sliding window in seconds (default 300 = 5m).
+
+        Returns:
+            Dict with limit, remaining, and reset_after_seconds.
+
+        Raises:
+            HTTPException: 429 Too Many Requests if the limit is exceeded.
+        """
+        if not settings.rate_limit_enabled:
+            return {"limit": limit, "remaining": limit - 1, "reset_after_seconds": 0}
+
+        r = get_redis_client()
+        key = f"mound:ratelimit:user:{user_id}:{action}"
+        now = time.time()
+
+        result = await r.eval(
+            SLIDING_WINDOW_LUA,
+            1,
+            key,
+            now,
+            window_seconds,
+            limit,
+        )
+
+        allowed = bool(result[0])
+        remaining = int(result[1])
+        reset_after = int(result[2])
+
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Registration velocity limit exceeded. Please wait {reset_after} seconds before connecting another agent.",
+                headers={
+                    "X-RateLimit-Limit": str(limit),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": str(int(now + reset_after)),
+                    "Retry-After": str(reset_after),
+                },
+            )
+
+        return {
+            "limit": limit,
+            "remaining": remaining,
+            "reset_after_seconds": reset_after,
+        }

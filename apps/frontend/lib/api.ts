@@ -264,3 +264,23 @@ export async function triggerAgentWorkflow(
   }
   return await res.json();
 }
+
+export async function revokeAgent(
+  agentId: string,
+  ownerUserId: string,
+  token?: string
+): Promise<{ message: string; agent_id: string }> {
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/agents/${agentId}?owner_user_id=${ownerUserId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || "Failed to revoke agent credentials");
+  }
+  return await res.json();
+}
+

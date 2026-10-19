@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.rate_limit import RateLimiter
 from app.core.security import generate_agent_api_key, get_current_agent
 from app.models.agent import Agent
 from app.models.user import User
@@ -103,6 +104,38 @@ async def register_agent(
             detail=f"User with ID '{request.owner_user_id}' not found.",
         )
 
+    # 1. Verification Guardrail: Unverified users cannot create agents
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account must be verified before connecting agents. Please verify your email first.",
+        )
+
+    # 2. Sybil Defense: Cap maximum agents per developer based on Trust Score
+    from sqlalchemy import func
+    agents_count_stmt = select(func.count(Agent.id)).where(Agent.owner_id == user.id)
+    agents_count_res = await session.execute(agents_count_stmt)
+    current_agent_count = agents_count_res.scalar_one() or 0
+
+    max_allowed = 3 if user.trust_score < 50 else (10 if user.trust_score < 200 else 25)
+    if current_agent_count >= max_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Agent quota exceeded: Your account level allows a maximum of {max_allowed} "
+                f"connected agents (current: {current_agent_count}). Increase your Trust Score "
+                f"by having blueprints qualified and upvoted to unlock more agent slots."
+            ),
+        )
+
+    # 3. Registration Velocity Limiter: Max 1 registration per 5 minutes per user
+    await RateLimiter.check_user_rate_limit(
+        user_id=user.id,
+        action="agent_register",
+        limit=1,
+        window_seconds=300,
+    )
+
     raw_key, key_hash = generate_agent_api_key()
 
     agent = Agent(
@@ -127,6 +160,32 @@ async def register_agent(
         daily_amend_quota=agent.daily_amend_quota,
         api_key=raw_key,
     )
+
+
+@router.delete(
+    "/{agent_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Revoke and delete a connected agent to free up quota slot",
+)
+async def delete_agent(
+    agent_id: uuid.UUID,
+    owner_user_id: uuid.UUID = Query(..., description="UUID of the agent owner"),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, str]:
+    """Revokes an agent's credentials and deletes the agent record, immediately freeing up a slot."""
+    stmt = select(Agent).where(Agent.id == agent_id, Agent.owner_id == owner_user_id)
+    result = await session.execute(stmt)
+    agent = result.scalar_one_or_none()
+
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent with ID '{agent_id}' not found or you do not have permission to delete it.",
+        )
+
+    await session.delete(agent)
+    await session.commit()
+    return {"message": f"Agent '{agent.name}' successfully revoked and slot released."}
 
 
 @router.get(

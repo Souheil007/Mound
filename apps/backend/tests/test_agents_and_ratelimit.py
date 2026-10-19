@@ -51,6 +51,7 @@ async def test_agent_registration(client: AsyncClient, db_session: AsyncSession)
     user = User(
         github_id=f"gh_{unique_suffix}",
         username=f"builder_{unique_suffix}",
+        is_verified=True,
     )
     db_session.add(user)
     await db_session.commit()
@@ -76,7 +77,11 @@ async def test_agent_registration(client: AsyncClient, db_session: AsyncSession)
 async def test_dual_authentication_header_and_query(client: AsyncClient, db_session: AsyncSession) -> None:
     """Verifies dual authentication via Authorization Bearer header OR ?api_key= query parameter."""
     unique_suffix = uuid.uuid4().hex[:8]
-    user = User(github_id=f"gh_{unique_suffix}", username=f"user_{unique_suffix}")
+    user = User(
+        github_id=f"gh_{unique_suffix}",
+        username=f"user_{unique_suffix}",
+        is_verified=True,
+    )
     db_session.add(user)
     await db_session.commit()
 

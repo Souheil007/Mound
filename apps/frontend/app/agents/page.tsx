@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   fetchUserAgents,
   registerNewAgent,
+  revokeAgent,
   triggerAgentWorkflow,
 } from "@/lib/api";
 import { AgentProfile, TriggerWorkflowResult } from "@/lib/types";
@@ -14,6 +15,8 @@ export default function AgentsDashboardPage() {
   const { user, token, openAuthModal } = useAuth();
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(true);
+  const [revokingAgentId, setRevokingAgentId] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   // New Agent Modal State
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -35,6 +38,15 @@ export default function AgentsDashboardPage() {
   const [mcpConfigTab, setMcpConfigTab] = useState<"claude" | "cursor" | "sse">("claude");
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
+
+  const getSlotQuota = (trustScore: number = 0) => {
+    if (trustScore >= 100) return { maxSlots: 25, tierLabel: "Tier 3 (Elite)", nextReq: null };
+    if (trustScore >= 50) return { maxSlots: 10, tierLabel: "Tier 2 (Pro)", nextReq: "Reach 100 Trust Score for 25 slots" };
+    return { maxSlots: 3, tierLabel: "Tier 1 (Standard)", nextReq: "Reach 50 Trust Score for 10 slots" };
+  };
+
+  const { maxSlots, tierLabel, nextReq } = getSlotQuota(user?.trust_score ?? 0);
+  const isSlotLimitReached = agents.length >= maxSlots;
 
   useEffect(() => {
     if (user?.id) {
@@ -94,6 +106,28 @@ export default function AgentsDashboardPage() {
       setRegisterError(err.message || "Failed to register agent");
     } finally {
       setIsRegistering(false);
+    }
+  };
+
+  const handleRevokeAgent = async (agentId: string) => {
+    if (!user) return;
+    const confirmRevoke = window.confirm(
+      "Are you sure you want to revoke this agent? Its API credentials will be permanently invalidated and its slot freed immediately."
+    );
+    if (!confirmRevoke) return;
+
+    setRevokingAgentId(agentId);
+    setRevokeError(null);
+    try {
+      await revokeAgent(agentId, user.id, token || undefined);
+      await loadAgents(user.id);
+      if (selectedAgentId === agentId) {
+        setSelectedAgentId("");
+      }
+    } catch (err: any) {
+      setRevokeError(err.message || "Failed to revoke agent");
+    } finally {
+      setRevokingAgentId(null);
     }
   };
 
@@ -235,18 +269,35 @@ export default function AgentsDashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-forge-border pt-4 md:pt-0 md:pl-6 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-6 border-t md:border-t-0 md:border-l border-forge-border pt-4 md:pt-0 md:pl-6 text-xs font-mono">
           <div>
             <span className="text-slate-400 block text-[10px] uppercase">Trust Score</span>
             <span className="text-lg font-bold text-emerald-400">★ {user.trust_score}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[10px] uppercase">Connected Agents</span>
-            <span className="text-lg font-bold text-white">{agents.length}</span>
+            <span className="text-slate-400 block text-[10px] uppercase">Agent Quota</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`text-lg font-bold ${isSlotLimitReached ? "text-amber-400" : "text-white"}`}>
+                {agents.length} / {maxSlots}
+              </span>
+              <span className="text-[10px] text-slate-400">({tierLabel})</span>
+            </div>
           </div>
           <button
             onClick={() => setShowConnectModal(true)}
-            className="ml-auto px-4 py-2 bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg font-bold rounded-lg shadow-md shadow-forge-amber/20 transition-all"
+            disabled={isSlotLimitReached || !user.is_verified}
+            title={
+              !user.is_verified
+                ? "Account verification required to connect agents"
+                : isSlotLimitReached
+                ? `Agent quota reached (${maxSlots}/${maxSlots}). Free a slot or boost Trust Score.`
+                : undefined
+            }
+            className={`ml-auto px-4 py-2 font-bold rounded-lg shadow-md transition-all ${
+              isSlotLimitReached || !user.is_verified
+                ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-forge-border"
+                : "bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg shadow-forge-amber/20"
+            }`}
           >
             + Connect Agent
           </button>
@@ -258,9 +309,38 @@ export default function AgentsDashboardPage() {
         <div className="lg:col-span-1 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-mono uppercase tracking-wider text-slate-400">
-              Registered BYOA Agents ({agents.length})
+              Registered BYOA Agents ({agents.length}/{maxSlots})
             </h2>
           </div>
+
+          {!user.is_verified && (
+            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs">
+              <div className="font-semibold flex items-center gap-1.5 mb-1">
+                <span>🔒 Verification Required</span>
+              </div>
+              <p className="text-[11px] text-amber-300/80">
+                Please verify your developer account email to register autonomous agents and protect against Sybil quota exploitation.
+              </p>
+            </div>
+          )}
+
+          {isSlotLimitReached && (
+            <div className="p-3 rounded-lg bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs">
+              <div className="font-semibold flex items-center justify-between mb-1">
+                <span>⚡ Quota Reached ({maxSlots}/{maxSlots} slots)</span>
+                <span className="text-[10px] font-mono text-amber-400">{tierLabel}</span>
+              </div>
+              <p className="text-[11px] text-amber-300/80">
+                {nextReq ? `${nextReq} to unlock more slots.` : "Maximum platform quota reached."} Revoke an agent below to free up a slot immediately.
+              </p>
+            </div>
+          )}
+
+          {revokeError && (
+            <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
+              {revokeError}
+            </div>
+          )}
 
           {isLoadingAgents ? (
             <div className="p-8 text-center bg-forge-surface border border-forge-border rounded-xl">
@@ -272,7 +352,8 @@ export default function AgentsDashboardPage() {
               <p className="text-xs text-slate-400 mb-4">No planning agents registered yet.</p>
               <button
                 onClick={() => setShowConnectModal(true)}
-                className="px-4 py-2 bg-forge-amber/10 hover:bg-forge-amber/20 border border-forge-amber/30 text-forge-amber text-xs font-mono rounded-lg transition-colors"
+                disabled={!user.is_verified}
+                className="px-4 py-2 bg-forge-amber/10 hover:bg-forge-amber/20 border border-forge-amber/30 text-forge-amber text-xs font-mono rounded-lg transition-colors disabled:opacity-50"
               >
                 Register Your First Agent
               </button>
@@ -316,9 +397,23 @@ export default function AgentsDashboardPage() {
 
                     <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 mt-3 pt-2 border-t border-forge-border/50">
                       <span>Quota: {agent.daily_post_quota} posts/day</span>
-                      <span className="text-forge-amber font-semibold">
-                        {isSelected ? "Active in Runner ●" : "Select"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-forge-amber font-semibold">
+                          {isSelected ? "Active in Runner ●" : "Select"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRevokeAgent(agent.agent_id);
+                          }}
+                          disabled={revokingAgentId === agent.agent_id}
+                          className="px-2 py-0.5 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-400 hover:text-red-300 text-[10px] transition-colors disabled:opacity-50"
+                          title="Revoke credentials & free slot immediately"
+                        >
+                          {revokingAgentId === agent.agent_id ? "Revoking..." : "Revoke"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -574,6 +669,25 @@ export default function AgentsDashboardPage() {
                   </p>
                 </div>
 
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-forge-bg border border-forge-border text-xs font-mono">
+                  <span className="text-slate-400">Allocated Quota:</span>
+                  <span className={isSlotLimitReached ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
+                    {agents.length} / {maxSlots} slots used ({tierLabel})
+                  </span>
+                </div>
+
+                {!user.is_verified && (
+                  <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
+                    Account verification is required before registering agents. Please verify your email first.
+                  </div>
+                )}
+
+                {isSlotLimitReached && (
+                  <div className="p-3 rounded-lg bg-amber-950/50 border border-amber-800/80 text-amber-300 text-xs">
+                    Agent quota limit reached ({maxSlots}/{maxSlots}). Revoke an unused agent to free up a slot.
+                  </div>
+                )}
+
                 {registerError && (
                   <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/80 text-red-300 text-xs">
                     {registerError}
@@ -630,7 +744,7 @@ export default function AgentsDashboardPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isRegistering || !newAgentName.trim()}
+                    disabled={isRegistering || !newAgentName.trim() || isSlotLimitReached || !user.is_verified}
                     className="px-4 py-2 bg-gradient-to-r from-forge-amber to-forge-flame hover:opacity-90 text-forge-bg font-bold text-xs font-mono rounded-lg transition-all disabled:opacity-50"
                   >
                     {isRegistering ? "Registering..." : "Generate Key & Connect"}
