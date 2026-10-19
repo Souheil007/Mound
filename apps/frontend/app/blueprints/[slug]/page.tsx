@@ -95,65 +95,89 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Main Column */}
         <div className="md:col-span-2 space-y-8">
-          {/* Problem Statement */}
-          <section className="bg-forge-card border border-forge-border rounded-xl p-6 space-y-3">
-            <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold">
-              Problem Statement
-            </h2>
-            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
-              {spec.problem_statement}
-            </p>
+          {/* Unified Engineering Specification Container */}
+          <div className="bg-forge-card border border-forge-border rounded-2xl shadow-xl overflow-hidden">
+            {/* Specification Header Bar */}
+            <div className="bg-forge-surface/70 border-b border-forge-border px-6 py-3.5 flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <span className="w-2 h-2 rounded-full bg-forge-amber" />
+                <span className="text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase">
+                  Canonical Engineering Specification
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-slate-500">
+                v{blueprint.current_version_num}.0 Snapshot
+              </span>
+            </div>
 
-            {spec.pain_evidence_urls && spec.pain_evidence_urls.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-forge-border/80">
-                <span className="text-xs font-mono text-slate-400 block mb-1.5">Evidence of Pain:</span>
-                <ul className="space-y-1">
-                  {spec.pain_evidence_urls.map((url, i) => (
-                    <li key={i}>
+            {/* Zone 1: Problem Statement & Verified Evidence */}
+            <div className="p-6 sm:p-7 space-y-4">
+              <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold flex items-center space-x-2">
+                <span>01 // Problem Statement</span>
+              </h2>
+              <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+                {spec.problem_statement}
+              </p>
+
+              {spec.pain_evidence_urls && spec.pain_evidence_urls.length > 0 && (
+                <div className="mt-4 pt-3.5 border-t border-forge-border/60">
+                  <span className="text-xs font-mono text-slate-400 block mb-2">Verified Evidence Sources:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {spec.pain_evidence_urls.map((url, i) => (
                       <a
+                        key={i}
                         href={url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-forge-blue hover:underline font-mono break-all inline-flex items-center space-x-1"
+                        className="inline-flex items-center space-x-1.5 text-xs font-mono text-forge-blue hover:text-white bg-forge-surface/80 hover:bg-forge-surface border border-forge-border px-3 py-1.5 rounded-lg transition-colors break-all"
                       >
-                        <span>› {url}</span>
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        </svg>
+                        <span>{url.replace(/^https?:\/\//, "")}</span>
                       </a>
-                    </li>
-                  ))}
-                </ul>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Zone 2: Core MVP Deliverables */}
+            <div className="p-6 sm:p-7 border-t border-forge-border/80 bg-forge-bg/30 space-y-4">
+              <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold flex items-center space-x-2">
+                <span>02 // Core MVP Deliverables</span>
+              </h2>
+              <ul className="space-y-3">
+                {spec.mvp_deliverables?.map((item, idx) => (
+                  <li key={idx} className="flex items-start space-x-3 text-sm text-slate-200">
+                    <span className="font-mono text-forge-amber font-bold text-xs mt-0.5 select-none bg-forge-amber/10 border border-forge-amber/20 w-5 h-5 rounded flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span className="leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Zone 3: Acceptance Criteria & Verification */}
+            <div className="p-6 sm:p-7 border-t border-forge-border/80 space-y-4">
+              <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold flex items-center space-x-2">
+                <span>03 // Acceptance Criteria & Verification</span>
+              </h2>
+              <div className="grid grid-cols-1 gap-2.5">
+                {spec.acceptance_criteria?.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-start space-x-2.5 text-xs text-slate-200 font-mono bg-forge-surface/60 p-3 rounded-lg border border-forge-border/70"
+                  >
+                    <span className="text-emerald-400 font-bold select-none shrink-0 mt-0.5">✓</span>
+                    <span className="leading-relaxed">{item}</span>
+                  </div>
+                ))}
               </div>
-            )}
-          </section>
-
-          {/* MVP Deliverables */}
-          <section className="bg-forge-card border border-forge-border rounded-xl p-6 space-y-3">
-            <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold">
-              Core MVP Deliverables
-            </h2>
-            <ul className="space-y-2.5 text-sm text-slate-200">
-              {spec.mvp_deliverables?.map((item, idx) => (
-                <li key={idx} className="flex items-start space-x-3">
-                  <span className="font-mono text-forge-amber font-bold text-xs mt-0.5 select-none">{idx + 1}.</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Acceptance Criteria */}
-          <section className="bg-forge-card border border-forge-border rounded-xl p-6 space-y-3">
-            <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold">
-              Acceptance Criteria & Verification
-            </h2>
-            <ul className="space-y-2 text-sm text-slate-200 font-mono">
-              {spec.acceptance_criteria?.map((item, idx) => (
-                <li key={idx} className="flex items-start space-x-2 text-xs bg-forge-surface p-2.5 rounded border border-forge-border/80">
-                  <span className="text-emerald-400 select-none">✓</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+            </div>
+          </div>
 
           {/* Visual Diff Viewer */}
           <section className="space-y-4">
