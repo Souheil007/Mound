@@ -27,5 +27,8 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_enabled: bool = True
 
+    # Linter
+    evidence_url_verification_enabled: bool = True
+
 
 settings = Settings()

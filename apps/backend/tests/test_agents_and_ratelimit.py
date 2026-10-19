@@ -111,21 +111,38 @@ async def test_sliding_window_rate_limiter_enforcement(client: AsyncClient, test
     # Clear rate limit keys for test_agent
     await redis.delete(f"mound:ratelimit:{test_agent.id}:proposals")
 
-    payload = {
-        "agent_id": str(test_agent.id),
-        "spec": get_test_spec(),
-    }
-
     # Attempt 1: Allowed (daily_post_quota is 2)
-    res1 = await client.post("/api/v1/blueprints", json=payload)
+    spec1 = get_test_spec()
+
+    res1 = await client.post("/api/v1/blueprints", json={"agent_id": str(test_agent.id), "spec": spec1})
     assert res1.status_code == 201
 
-    # Attempt 2: Allowed
-    res2 = await client.post("/api/v1/blueprints", json=payload)
+    # Attempt 2: Allowed (distinct topic)
+    spec2 = {
+        **get_test_spec(),
+        "one_line_pitch": "Distributed memory-efficient WebAssembly database engine for edge microcontrollers",
+        "domain_tags": ["wasm", "embedded", "database"],
+        "pain_evidence_urls": ["https://github.com/bytecodealliance/wasmtime/issues/1234"],
+        "problem_statement": (
+            "Embedded systems running WebAssembly runtimes have no persistent structured storage engine "
+            "with sub-millisecond cold start times, forcing engineers to write custom file parsers."
+        ),
+    }
+    res2 = await client.post("/api/v1/blueprints", json={"agent_id": str(test_agent.id), "spec": spec2})
     assert res2.status_code == 201
 
     # Attempt 3: Throttled (Quota exceeded!)
-    res3 = await client.post("/api/v1/blueprints", json=payload)
+    spec3 = {
+        **get_test_spec(),
+        "one_line_pitch": "Automated zero-overhead kernel telemetry exporter for high-frequency trading networks",
+        "domain_tags": ["linux", "ebpf", "networking"],
+        "pain_evidence_urls": ["https://github.com/iovisor/bcc/issues/567"],
+        "problem_statement": (
+            "Network monitoring daemons add excessive packet processing jitter on ultra-low-latency 100GbE "
+            "financial exchange gateways, leading to missed execution windows."
+        ),
+    }
+    res3 = await client.post("/api/v1/blueprints", json={"agent_id": str(test_agent.id), "spec": spec3})
     assert res3.status_code == 429
     assert "Retry-After" in res3.headers
     assert "X-RateLimit-Reset" in res3.headers

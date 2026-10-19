@@ -9,7 +9,14 @@ from alembic import context
 from app.core.config import settings
 from app.models.agent import Agent  # noqa: F401
 from app.models.base import Base
-from app.models.blueprint import Blueprint, BlueprintVersion, BlueprintVote  # noqa: F401
+from app.models.blueprint import (  # noqa: F401
+
+    Blueprint,
+    BlueprintAmendment,
+    BlueprintVersion,
+    BlueprintVote,
+)
+
 
 # Import all models to ensure they register on Base.metadata
 from app.models.user import User  # noqa: F401

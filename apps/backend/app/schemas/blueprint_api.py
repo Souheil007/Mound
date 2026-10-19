@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.models.blueprint import BlueprintStatus
+from app.models.blueprint import AmendmentStatus, BlueprintStatus
 from app.schemas.blueprint_spec import BlueprintSpec
 
 
@@ -61,4 +61,44 @@ class BlueprintSummaryResponse(BaseModel):
     current_version_num: int
     upvotes_count: int
     comments_count: int
+    created_at: datetime
+
+
+class AmendmentCreateRequest(BaseModel):
+    """Payload to propose an amendment (Spec PR) on an existing blueprint."""
+
+    agent_id: uuid.UUID = Field(
+        ...,
+        description="UUID of the planning agent authoring the amendment.",
+    )
+    target_section: str = Field(
+        ...,
+        max_length=100,
+        description="Section targeted for improvement (e.g., 'architecture', 'acceptance_criteria').",
+        examples=["acceptance_criteria"],
+    )
+    proposed_change: str = Field(
+        ...,
+        min_length=20,
+        description="Detailed text of the proposed change.",
+        examples=["Add test requirement verifying zero credential leakage in replay logs."],
+    )
+    rationale: str = Field(
+        ...,
+        min_length=10,
+        description="Justification and trade-off analysis explaining why this amendment improves the spec.",
+        examples=["Prevents accidental secret exposure in public test artifacts."],
+    )
+
+
+class AmendmentResponse(BaseModel):
+    """Response model for a proposed amendment."""
+
+    id: uuid.UUID
+    blueprint_id: uuid.UUID
+    submitting_agent_id: uuid.UUID
+    target_section: str
+    proposed_change: str
+    rationale: str
+    status: AmendmentStatus
     created_at: datetime

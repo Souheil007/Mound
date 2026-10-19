@@ -3,18 +3,23 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.rate_limit import RateLimiter
 from app.models.agent import Agent
 from app.schemas.blueprint_api import (
+    AmendmentCreateRequest,
+    AmendmentResponse,
     BlueprintCreateRequest,
     BlueprintDetailResponse,
     BlueprintSummaryResponse,
     BlueprintVersionResponse,
 )
 from app.services.blueprint_service import BlueprintService
+from app.services.dedup_engine import DedupEngine
+from app.services.spec_linter import SpecLinter
 
 router = APIRouter(prefix="/blueprints", tags=["Blueprints"])
 
@@ -39,11 +44,9 @@ async def create_blueprint(
         The created blueprint with v1 metadata.
 
     Raises:
-        HTTPException: 400 if the agent does not exist; 429 if rate limit exceeded.
+        HTTPException: 400 if the agent does not exist; 422 if linting fails;
+                       409 if duplicate detected; 429 if rate limit exceeded.
     """
-    # Fetch agent to verify existence and check quota
-    from sqlalchemy import select
-
     stmt = select(Agent).where(Agent.id == request.agent_id)
     result = await session.execute(stmt)
     agent = result.scalar_one_or_none()
@@ -53,13 +56,30 @@ async def create_blueprint(
             detail=f"Agent with ID '{request.agent_id}' does not exist.",
         )
 
-    # Check sliding window rate limit (24 hours)
+    # 1. Check sliding window rate limit (24 hours)
     await RateLimiter.check_rate_limit(
         agent_id=agent.id,
         action="proposals",
         limit=agent.daily_post_quota,
         window_seconds=86400,
     )
+
+    # 2. Resilient Spec Linter check
+    lint_res = await SpecLinter.lint(request.spec)
+    if not lint_res.passed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"errors": lint_res.errors},
+        )
+
+    # 3. Two-Tier Deduplication Gate
+    dedup_res = await DedupEngine.check_duplicate(session, request.spec)
+    if dedup_res.is_duplicate:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=dedup_res.message,
+            headers={"X-Duplicate-Of": str(dedup_res.existing_blueprint_id)},
+        )
 
     try:
         return await BlueprintService.create_blueprint(session, request)
@@ -142,3 +162,106 @@ async def list_blueprint_versions(
         A list of version records in chronological order.
     """
     return await BlueprintService.list_versions(session, blueprint_id)
+
+
+@router.post(
+    "/{blueprint_id}/amendments",
+    response_model=AmendmentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit an amendment (Spec PR) on an existing blueprint",
+)
+async def create_amendment(
+    blueprint_id: uuid.UUID,
+    request: AmendmentCreateRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> AmendmentResponse:
+    """Submits a structured amendment proposal to modify an existing blueprint.
+
+    Args:
+        blueprint_id: Target blueprint UUID.
+        request: Amendment payload with agent ID, target section, proposed change, rationale.
+        session: Injected database session.
+
+    Returns:
+        The created AmendmentResponse record.
+
+    Raises:
+        HTTPException: 400 if agent or blueprint invalid; 429 if rate limit exceeded.
+    """
+    stmt = select(Agent).where(Agent.id == request.agent_id)
+    result = await session.execute(stmt)
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Agent with ID '{request.agent_id}' does not exist.",
+        )
+
+    # Check sliding window rate limit for amendments (10 per 24 hours for Tier 1)
+    await RateLimiter.check_rate_limit(
+        agent_id=agent.id,
+        action="amendments",
+        limit=10,
+        window_seconds=86400,
+    )
+
+    try:
+        return await BlueprintService.create_amendment(session, blueprint_id, request)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{blueprint_id}/amendments",
+    response_model=list[AmendmentResponse],
+    summary="List all amendments submitted for a blueprint",
+)
+async def list_amendments(
+    blueprint_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[AmendmentResponse]:
+    """Lists all amendments for a blueprint ordered by submission date.
+
+    Args:
+        blueprint_id: UUID of the target blueprint.
+        session: Injected database session.
+
+    Returns:
+        List of AmendmentResponse objects.
+    """
+    return await BlueprintService.list_amendments(session, blueprint_id)
+
+
+@router.post(
+    "/{blueprint_id}/amendments/{amendment_id}/accept",
+    response_model=AmendmentResponse,
+    summary="Accept an amendment and credit author as co-author",
+)
+async def accept_amendment(
+    blueprint_id: uuid.UUID,
+    amendment_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+) -> AmendmentResponse:
+    """Accepts an amendment and adds the submitting agent to co_author_agent_ids.
+
+    Args:
+        blueprint_id: Target blueprint UUID.
+        amendment_id: Amendment UUID to accept.
+        session: Injected database session.
+
+    Returns:
+        The updated AmendmentResponse with status ACCEPTED.
+
+    Raises:
+        HTTPException: 404 if amendment or blueprint not found.
+    """
+    try:
+        return await BlueprintService.accept_amendment(session, blueprint_id, amendment_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc

@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -25,6 +26,22 @@ test_session_maker = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+settings.evidence_url_verification_enabled = False
+
+
+@pytest.fixture(autouse=True)
+async def clean_db() -> AsyncIterator[None]:
+    """Ensures test database tables are truncated before each test."""
+    async with test_session_maker() as session:
+        await session.execute(
+            text(
+                "TRUNCATE TABLE blueprint_amendments, blueprint_votes, blueprint_versions, "
+                "blueprints, agents, users CASCADE;"
+            )
+        )
+        await session.commit()
+    yield
 
 
 @pytest.fixture(autouse=True)

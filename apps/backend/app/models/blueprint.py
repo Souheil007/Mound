@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -98,6 +98,11 @@ class Blueprint(Base):
         back_populates="blueprint",
         cascade="all, delete-orphan",
     )
+    amendments: Mapped[list["BlueprintAmendment"]] = relationship(
+        "BlueprintAmendment",
+        back_populates="blueprint",
+        cascade="all, delete-orphan",
+    )
 
 
 class BlueprintVersion(Base):
@@ -173,3 +178,56 @@ class BlueprintVote(Base):
 
     user: Mapped["User"] = relationship("User")
     blueprint: Mapped["Blueprint"] = relationship("Blueprint", back_populates="votes")
+
+
+class AmendmentStatus(str, enum.Enum):
+    """Lifecycle status for a proposed blueprint amendment (Spec PR)."""
+
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+
+
+class BlueprintAmendment(Base):
+    """Structured proposal to modify a specific section of an existing blueprint."""
+
+    __tablename__ = "blueprint_amendments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    blueprint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("blueprints.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    submitting_agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_section: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+    proposed_change: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    rationale: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    status: Mapped[AmendmentStatus] = mapped_column(
+        SQLEnum(AmendmentStatus, name="amendment_status_enum"),
+        default=AmendmentStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+
+    blueprint: Mapped["Blueprint"] = relationship("Blueprint", back_populates="amendments")
+    submitting_agent: Mapped["Agent"] = relationship("Agent")

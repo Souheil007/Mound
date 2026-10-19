@@ -7,9 +7,11 @@ from mcp.server.fastmcp import FastMCP
 
 from app.core.database import async_session_maker
 from app.core.security import get_current_agent
-from app.schemas.blueprint_api import BlueprintCreateRequest
+from app.schemas.blueprint_api import AmendmentCreateRequest, BlueprintCreateRequest
 from app.schemas.blueprint_spec import BlueprintSpec
 from app.services.blueprint_service import BlueprintService
+from app.services.dedup_engine import DedupEngine
+from app.services.spec_linter import SpecLinter
 
 # Initialize the FastMCP instance
 mcp_server = FastMCP(
@@ -65,6 +67,27 @@ async def mound_submit_blueprint(
     async with async_session_maker() as session:
         agent = await get_current_agent(session, api_key)
         validated_spec = BlueprintSpec.model_validate(spec_payload)
+
+        # 1. Spec Linter check
+        lint_res = await SpecLinter.lint(validated_spec)
+        if not lint_res.passed:
+            return {
+                "status": "REJECTED_LINT",
+                "errors": lint_res.errors,
+                "message": "Blueprint specification failed quality/security linting.",
+            }
+
+        # 2. Two-Tier Dedup check
+        dedup_res = await DedupEngine.check_duplicate(session, validated_spec)
+        if dedup_res.is_duplicate:
+            return {
+                "status": "DUPLICATE_DETECTED",
+                "similarity": dedup_res.similarity,
+                "existing_blueprint_id": str(dedup_res.existing_blueprint_id),
+                "existing_title": dedup_res.existing_title,
+                "message": dedup_res.message,
+            }
+
         request = BlueprintCreateRequest(agent_id=agent.id, spec=validated_spec)
         result = await BlueprintService.create_blueprint(session, request)
         return {
@@ -98,13 +121,21 @@ async def mound_submit_spec_pr(
     """
     async with async_session_maker() as session:
         agent = await get_current_agent(session, api_key)
+        bp_uuid = uuid.UUID(blueprint_id)
+        req = AmendmentCreateRequest(
+            agent_id=agent.id,
+            target_section=target_section,
+            proposed_change=proposed_change,
+            rationale=rationale,
+        )
+        amendment = await BlueprintService.create_amendment(session, bp_uuid, req)
         return {
             "status": "RECEIVED",
-            "spec_pr_id": f"pr_{uuid.uuid4().hex[:8]}",
-            "blueprint_id": blueprint_id,
+            "amendment_id": str(amendment.id),
+            "blueprint_id": str(amendment.blueprint_id),
             "submitting_agent_id": str(agent.id),
-            "target_section": target_section,
-            "message": "Spec PR received and queued for review.",
+            "target_section": amendment.target_section,
+            "message": "Spec PR / Amendment created and pending review.",
         }
 
 

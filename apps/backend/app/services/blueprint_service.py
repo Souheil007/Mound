@@ -8,8 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.agent import Agent
-from app.models.blueprint import Blueprint, BlueprintStatus, BlueprintVersion
+from app.models.blueprint import (
+    AmendmentStatus,
+    Blueprint,
+    BlueprintAmendment,
+    BlueprintStatus,
+    BlueprintVersion,
+)
 from app.schemas.blueprint_api import (
+    AmendmentCreateRequest,
+    AmendmentResponse,
     BlueprintCreateRequest,
     BlueprintDetailResponse,
     BlueprintSummaryResponse,
@@ -216,3 +224,148 @@ class BlueprintService:
             )
             for v in versions
         ]
+
+    @classmethod
+    async def create_amendment(
+        cls,
+        session: AsyncSession,
+        blueprint_id: uuid.UUID,
+        request: AmendmentCreateRequest,
+    ) -> AmendmentResponse:
+        """Submits a new amendment (Spec PR) on an existing blueprint.
+
+        Args:
+            session: Active SQLAlchemy async session.
+            blueprint_id: UUID of the target blueprint.
+            request: Amendment proposal payload.
+
+        Returns:
+            The created AmendmentResponse.
+
+        Raises:
+            ValueError: If blueprint or submitting agent does not exist.
+        """
+        bp_stmt = select(Blueprint).where(Blueprint.id == blueprint_id)
+        bp_res = await session.execute(bp_stmt)
+        blueprint = bp_res.scalar_one_or_none()
+        if not blueprint:
+            raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
+
+        agent_stmt = select(Agent).where(Agent.id == request.agent_id)
+        agent_res = await session.execute(agent_stmt)
+        agent = agent_res.scalar_one_or_none()
+        if not agent:
+            raise ValueError(f"Agent with ID '{request.agent_id}' does not exist.")
+
+        amendment = BlueprintAmendment(
+            blueprint_id=blueprint_id,
+            submitting_agent_id=request.agent_id,
+            target_section=request.target_section,
+            proposed_change=request.proposed_change,
+            rationale=request.rationale,
+            status=AmendmentStatus.PENDING,
+        )
+        session.add(amendment)
+        await session.commit()
+        await session.refresh(amendment)
+
+        return AmendmentResponse(
+            id=amendment.id,
+            blueprint_id=amendment.blueprint_id,
+            submitting_agent_id=amendment.submitting_agent_id,
+            target_section=amendment.target_section,
+            proposed_change=amendment.proposed_change,
+            rationale=amendment.rationale,
+            status=amendment.status,
+            created_at=amendment.created_at,
+        )
+
+    @classmethod
+    async def list_amendments(
+        cls,
+        session: AsyncSession,
+        blueprint_id: uuid.UUID,
+    ) -> list[AmendmentResponse]:
+        """Lists all amendments submitted for a blueprint.
+
+        Args:
+            session: Active SQLAlchemy async session.
+            blueprint_id: UUID of the target blueprint.
+
+        Returns:
+            List of AmendmentResponse records.
+        """
+        stmt = (
+            select(BlueprintAmendment)
+            .where(BlueprintAmendment.blueprint_id == blueprint_id)
+            .order_by(BlueprintAmendment.created_at.desc())
+        )
+        result = await session.execute(stmt)
+        amendments = result.scalars().all()
+        return [
+            AmendmentResponse(
+                id=a.id,
+                blueprint_id=a.blueprint_id,
+                submitting_agent_id=a.submitting_agent_id,
+                target_section=a.target_section,
+                proposed_change=a.proposed_change,
+                rationale=a.rationale,
+                status=a.status,
+                created_at=a.created_at,
+            )
+            for a in amendments
+        ]
+
+    @classmethod
+    async def accept_amendment(
+        cls,
+        session: AsyncSession,
+        blueprint_id: uuid.UUID,
+        amendment_id: uuid.UUID,
+    ) -> AmendmentResponse:
+        """Accepts an amendment and credits the author as a co-author on the blueprint.
+
+        Args:
+            session: Active SQLAlchemy async session.
+            blueprint_id: UUID of the target blueprint.
+            amendment_id: UUID of the amendment to accept.
+
+        Returns:
+            The updated AmendmentResponse with status ACCEPTED.
+
+        Raises:
+            ValueError: If amendment or blueprint not found.
+        """
+        stmt = select(BlueprintAmendment).where(
+            BlueprintAmendment.id == amendment_id,
+            BlueprintAmendment.blueprint_id == blueprint_id,
+        )
+        result = await session.execute(stmt)
+        amendment = result.scalar_one_or_none()
+        if not amendment:
+            raise ValueError(f"Amendment with ID '{amendment_id}' not found on blueprint '{blueprint_id}'.")
+
+        amendment.status = AmendmentStatus.ACCEPTED
+
+        bp_stmt = select(Blueprint).where(Blueprint.id == blueprint_id)
+        bp_res = await session.execute(bp_stmt)
+        blueprint = bp_res.scalar_one()
+
+        current_co_authors = list(blueprint.co_author_agent_ids or [])
+        if amendment.submitting_agent_id not in current_co_authors:
+            current_co_authors.append(amendment.submitting_agent_id)
+            blueprint.co_author_agent_ids = current_co_authors
+
+        await session.commit()
+        await session.refresh(amendment)
+
+        return AmendmentResponse(
+            id=amendment.id,
+            blueprint_id=amendment.blueprint_id,
+            submitting_agent_id=amendment.submitting_agent_id,
+            target_section=amendment.target_section,
+            proposed_change=amendment.proposed_change,
+            rationale=amendment.rationale,
+            status=amendment.status,
+            created_at=amendment.created_at,
+        )
