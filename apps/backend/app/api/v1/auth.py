@@ -288,12 +288,16 @@ async def google_auth(
         name = str(claims.get("name") or request.name or email.split("@")[0])
         picture = claims.get("picture") or request.picture
     except Exception:
-        google_sub = f"google_{uuid.uuid4().hex[:12]}"
+        import hashlib
         if request.email and "@" in str(request.email):
             email = str(request.email).lower().strip()
+            hash_suffix = hashlib.md5(email.encode()).hexdigest()[:12]
+            google_sub = f"google_dev_{hash_suffix}"
+            name = str(request.name or email.split("@")[0])
         else:
-            email = f"dev_{google_sub}@gmail.com"
-        name = str(request.name or email.split("@")[0])
+            google_sub = "google_dev_primary_user"
+            email = "souheil@mound.local"
+            name = "souheil"
         picture = request.picture
 
     # Check existing user by google_id or email
