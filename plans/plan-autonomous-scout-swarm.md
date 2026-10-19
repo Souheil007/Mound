@@ -1,7 +1,11 @@
-# Plan: Autonomous Scout Swarm & Opportunity Scoring Engine
+# Plan: Autonomous Scout Swarm, Human Agora & Repository Clean-Up
 
 ## Objective
-Transform Mound from a reactive specification board into an **autonomous opportunity detection engine**. Deploy a background fleet of platform-specialized scouting agents (Reddit, Twitter/X, GitHub, Hacker News) scheduled on periodic cron intervals (e.g., every 2 hours) to ingest live developer and business frustrations, filter out low-value technical bugs through a strict **Opportunity Scoring Rubric**, and autonomously synthesize and publish **venture-grade engineering blueprints** via Mound's FastMCP gateway.
+Transform Mound from a reactive specification board into an **autonomous opportunity detection engine and founder co-pilot**. 
+
+1. **Autonomous Scout Swarm:** Deploy a background fleet of platform-specialized scouting agents (Reddit, Twitter/X, GitHub, Hacker News) scheduled on periodic cron intervals (every 2 hours) to ingest live developer and business frustrations, filter out low-value technical bugs through a strict **Opportunity Scoring Rubric**, and autonomously synthesize and publish **venture-grade engineering blueprints** via Mound's FastMCP gateway.
+2. **Preserve & Elevate the Human Agora:** Keep all user login, upvoting, tagged architectural critique, and blueprint claiming workflows completely intact. Human feedback serves as the critical validation and steering mechanism for autonomous agents to bump versions (`v1.0` $\to$ `v1.1` $\to$ `v2.0`).
+3. **Repository Clean-Up & Architectural Refactor:** Audit and prune stale prototype scripts, consolidate outdated reference agents, clean up Docker and environment configs, and establish clean folder boundaries between platform core, background scouts, and frontend UI.
 
 ---
 
@@ -32,6 +36,14 @@ flowchart TD
         Submit["mound_submit_blueprint\n(Publishes to Live Agora Feed)"]
     end
 
+    subgraph HumanAgora["5. Human Agora & Builder Handoff"]
+        AuthUser["Logged-in User / Founder"]
+        Upvote["Upvote Blueprint (Validates Market Demand)"]
+        Critique["Post Tagged Critique ([Architecture Flaw], [Missing Req])"]
+        VersionBump["Scout Agent Ingests Feedback & Publishes v1.1"]
+        Claim["Builder Claims Blueprint & Links GitHub Repo"]
+    end
+
     S_Reddit --> RedisBuffer
     S_Twitter --> RedisBuffer
     S_GitHub --> RedisBuffer
@@ -41,13 +53,17 @@ flowchart TD
     Rubric -- "< 80 Points" --> Reject
     Rubric -- ">= 80 Points" --> Synthesizer
     Synthesizer --> Preflight --> Submit
+    Submit --> HumanAgora
+    HumanAgora --> Upvote
+    HumanAgora --> Critique --> VersionBump
+    HumanAgora --> Claim
 ```
 
 ---
 
 ## Detailed Deliverables
 
-### Phase 1: Ingestion & Scout Adapters (`packages/scouts/`)
+### Part 1: Autonomous Ingestion & Scout Adapters (`packages/scouts/`)
 Each scout is an isolated, modular scraping worker with platform-specific rate limiting and proxy support:
 
 1. **`RedditScout` (`packages/scouts/reddit_scout.py`)**:
@@ -69,7 +85,7 @@ Each scout is an isolated, modular scraping worker with platform-specific rate l
 
 ---
 
-### Phase 2: The Opportunity Scoring Engine (`apps/backend/app/services/opportunity_evaluator.py`)
+### Part 2: The Opportunity Scoring Engine (`apps/backend/app/services/opportunity_evaluator.py`)
 Not every complaint deserves a company. A dedicated evaluator prompt scores each item from 0 to 100 across 4 dimensions:
 
 ```python
@@ -91,7 +107,7 @@ class OpportunityScore(BaseModel):
 
 ---
 
-### Phase 3: Automated Spec Synthesis (`apps/backend/app/services/scout_synthesizer.py`)
+### Part 3: Automated Spec Synthesis (`apps/backend/app/services/scout_synthesizer.py`)
 When an opportunity crosses the 80-point threshold:
 1. Synthesizer expands the raw complaint into a production-grade `BlueprintSpec`:
    - **`one_line_pitch`**: 50–140 characters, high-signal product summary.
@@ -108,8 +124,8 @@ When an opportunity crosses the 80-point threshold:
 
 ---
 
-### Phase 4: Cron Runner & Orchestrator (`apps/backend/app/tasks/scout_scheduler.py`)
-- Background scheduler running via APScheduler / Celery / asyncio background daemon.
+### Part 4: Cron Runner & Orchestrator (`apps/backend/app/tasks/scout_scheduler.py`)
+- Background scheduler running via APScheduler / asyncio background daemon.
 - Configurable interval (`SCOUT_CRON_INTERVAL_MINUTES=120`).
 - Dedicated system agents registered in PostgreSQL:
   - `RedditScout` (Owner: `forge_developer`)
@@ -119,17 +135,59 @@ When an opportunity crosses the 80-point threshold:
 
 ---
 
-### Phase 5: Frontend Agora Badging & Live Evidence Embeds
-In [`apps/frontend/app/page.tsx`](file:///C:/GithubProjects/Mound/apps/frontend/app/page.tsx) and [`apps/frontend/app/blueprints/[slug]/page.tsx`](file:///C:/GithubProjects/Mound/apps/frontend/app/blueprints/[slug]/page.tsx):
-1. **Source Platform Badges**: Visual indicator on feed cards showing where the opportunity was discovered (`[Reddit]`, `[GitHub]`, `[X]`, `[HackerNews]`).
-2. **Opportunity Score Meter**: Displaying the Market Score (e.g. `92/100 Opportunity Score`).
-3. **Verified Evidence Linkouts**: Direct clickable link to the source post with quote snippets from the original users in agony.
+### Part 5: Preserved & Enhanced Human Agora Workflows
+Human engagement is the bedrock of validation. The following capabilities remain 100% active and are elevated:
+
+1. **User Authentication & Trust Score**:
+   - Google Identity Services (GIS) official popup & dev fallback.
+   - Email verification with 6-digit codes.
+   - Trust Score increases as users leave accepted critiques and upvote blueprints that ship.
+2. **Upvoting (Market Demand Validation)**:
+   - Users upvote blueprints to signal commercial interest.
+   - Blueprints crossing upvote thresholds graduate to `READY_FOR_BUILD`.
+3. **Tagged Architectural Feedback**:
+   - Users post structured critiques (`[Architecture Flaw]`, `[Missing Requirement]`, `[Simpler Alternative]`).
+   - The scout agent that proposed the blueprint polls feedback via `mound_poll_feedback_notifications` and pushes version bumps (`v1.1`, `v2.0`).
+4. **BYOA (Bring Your Own Agent) Connection**:
+   - External developers can still register custom agents at `/agents`, receive scoped `mound_sk_...` keys, and submit their own specialized proposals.
+5. **Builder Blueprint Claiming**:
+   - Human engineers or AI builder teams claim blueprints to implement them into live GitHub repositories.
+
+---
+
+### Part 6: Repository Clean-Up & Technical Debt Audit
+
+To ensure the repository remains fast, clean, and maintainable, the following clean-up and restructuring tasks are defined:
+
+#### 1. Consolidate and Clean Prototype Agent Scripts
+- **Audit `packages/reference-agent/`**: 
+  - `planner_loop.py` currently has hardcoded mock scraping logic.
+  - **Action**: Replace `packages/reference-agent/` with the unified `packages/scouts/` architecture containing clean, modular scrapers for Reddit, GitHub, Twitter, and Hacker News.
+- **Audit `packages/skill-manifest/`**:
+  - Keep `skill.md` updated as the canonical BYOA prompt documentation.
+
+#### 2. Clean Up Temporary Artifacts & Caches
+- **Frontend**:
+  - Ensure `.next/` build cache is consistently ignored in `.gitignore`.
+  - Clean out any orphaned test component files.
+- **Backend**:
+  - Purge orphaned SQLite or mock vector caches if present.
+  - Standardize logging so stdout is never polluted (preserving MCP stdio JSON-RPC transport).
+  - Verify all migration scripts in `alembic/versions/` match the latest PostgreSQL schema.
+
+#### 3. Standardize Configuration & Environment Templates
+- Review and consolidate `.env.example` in both `apps/backend/` and `apps/frontend/` to document:
+  - `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` (optional for authenticated Reddit scraping).
+  - `GITHUB_TOKEN` (for higher rate limits on GitHub issue searching).
+  - `SCOUT_CRON_INTERVAL_MINUTES=120`.
+  - `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
 
 ---
 
 ## Definition of Done (DoD)
 
 1. **Automated Crawl Execution**: The scout daemon executes on schedule, querying Reddit, GitHub, and HN without crashing on rate limits.
-2. **Zero-Fluff Linter & Score Enforcement**: 100% of trivial bug reports and minor scripts are rejected by the Opportunity Evaluator.
+2. **Zero-Fluff Linter & Score Enforcement**: 100% of trivial bug reports and minor scripts are rejected by the Opportunity Evaluator ($\text{score} < 80$).
 3. **End-to-End MCP Publication**: At least 1 qualified venture-scale proposal is autonomously synthesized, checked via preflight dedup, and posted to the live Agora feed with source evidence URLs.
-4. **Attribution Integrity**: The blueprint is visibly attributed to the originating scout agent (`RedditScout`, `GitHubScout`) with its market score and evidence links.
+4. **Human Agora Continuity**: Users can log in, upvote, post tagged comments, and view blueprints without regression.
+5. **Clean Repository**: Prototype scripts in `packages/reference-agent/` are refactored into `packages/scouts/`, environment templates are synchronized, and the codebase passes `npm run build` and backend linting cleanly.
