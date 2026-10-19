@@ -4,13 +4,17 @@ import uuid
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.database import async_session_maker
 from app.core.security import get_current_agent
+from app.models.blueprint import Blueprint
 from app.schemas.blueprint_api import AmendmentCreateRequest, BlueprintCreateRequest
 from app.schemas.blueprint_spec import BlueprintSpec
 from app.services.blueprint_service import BlueprintService
 from app.services.dedup_engine import DedupEngine
+from app.services.embedding_engine import EmbeddingEngine
 from app.services.spec_linter import SpecLinter
 
 # Initialize the FastMCP instance
@@ -34,20 +38,72 @@ async def mound_preflight_check(
         problem_statement: 100-600 character explanation of the broken workflow.
 
     Returns:
-        Dict indicating status (NOVEL or DUPLICATE_DETECTED) and preflight similarity.
+        Dict indicating status (NOVEL, DUPLICATE_DETECTED, or INVALID) and preflight similarity.
     """
-    # In Plan 2, this verifies the inputs format; in Plan 3, this connects to the full pgvector RRF engine.
     if len(one_line_pitch) < 50:
         return {
             "status": "INVALID",
             "message": "one_line_pitch must be at least 50 characters long.",
         }
-    return {
-        "status": "NOVEL",
-        "max_similarity": 0.0,
-        "preflight_token": f"pft_{uuid.uuid4().hex[:12]}",
-        "message": "Proposal is novel. Proceed to mound_submit_blueprint.",
-    }
+    if len(one_line_pitch) > 140:
+        return {
+            "status": "INVALID",
+            "message": "one_line_pitch cannot exceed 140 characters.",
+        }
+    if len(problem_statement) < 100:
+        return {
+            "status": "INVALID",
+            "message": "problem_statement must be at least 100 characters long.",
+        }
+    if len(problem_statement) > 600:
+        return {
+            "status": "INVALID",
+            "message": "problem_statement cannot exceed 600 characters.",
+        }
+
+    async with async_session_maker() as session:
+        embed_input = f"{one_line_pitch}\n{problem_statement}"
+        query_vector = EmbeddingEngine.embed_text(embed_input)
+
+        stmt = (
+            select(
+                Blueprint,
+                (1.0 - Blueprint.search_vector.cosine_distance(query_vector)).label("similarity"),
+            )
+            .options(selectinload(Blueprint.versions))
+            .where(Blueprint.search_vector.isnot(None))
+            .order_by(Blueprint.search_vector.cosine_distance(query_vector))
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        match = result.first()
+
+        if match:
+            bp, sim_val = match
+            sim = round(float(sim_val), 4)
+            if sim >= DedupEngine.SIMILARITY_THRESHOLD_BORDERLINE:
+                latest_v = max(bp.versions, key=lambda v: v.version_num) if bp.versions else None
+                title = latest_v.spec_payload.get("one_line_pitch", bp.slug) if latest_v else bp.slug
+                return {
+                    "status": "DUPLICATE_DETECTED",
+                    "max_similarity": sim,
+                    "existing_blueprint_id": str(bp.id),
+                    "existing_blueprint_slug": bp.slug,
+                    "existing_title": title,
+                    "message": (
+                        f"A very similar blueprint already exists with {sim * 100:.1f}% "
+                        f"semantic similarity: '{title}'. Consider submitting an amendment via "
+                        f"mound_submit_amendment instead."
+                    ),
+                }
+
+        max_sim = round(float(match[1]), 4) if match else 0.0
+        return {
+            "status": "NOVEL",
+            "max_similarity": max_sim,
+            "preflight_token": f"pft_{uuid.uuid4().hex[:12]}",
+            "message": "Proposal is novel. Proceed to mound_submit_blueprint.",
+        }
 
 
 @mcp_server.tool()

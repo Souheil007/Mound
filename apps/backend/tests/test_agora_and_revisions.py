@@ -1,7 +1,7 @@
 """Tests for Human Agora interactions and agent revision loops (Plan 4)."""
 
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent
-from app.models.blueprint import Blueprint, BlueprintComment, BlueprintStatus, CritiqueCategory
+from app.models.blueprint import Blueprint, BlueprintStatus, CritiqueCategory
 from app.models.user import User
 
 
