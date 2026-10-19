@@ -104,9 +104,7 @@ class BlueprintVersion(Base):
     """Immutable snapshot of a blueprint specification at a specific version."""
 
     __tablename__ = "blueprint_versions"
-    __table_args__ = (
-        UniqueConstraint("blueprint_id", "version_num", name="uq_blueprint_version"),
-    )
+    __table_args__ = (UniqueConstraint("blueprint_id", "version_num", name="uq_blueprint_version"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -153,9 +151,7 @@ class BlueprintVote(Base):
     """Human upvote linking an authenticated user to a blueprint."""
 
     __tablename__ = "blueprint_votes"
-    __table_args__ = (
-        UniqueConstraint("user_id", "blueprint_id", name="uq_user_blueprint_vote"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "blueprint_id", name="uq_user_blueprint_vote"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

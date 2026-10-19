@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.rate_limit import RateLimiter
+from app.models.agent import Agent
 from app.schemas.blueprint_api import (
     BlueprintCreateRequest,
     BlueprintDetailResponse,
@@ -37,8 +39,28 @@ async def create_blueprint(
         The created blueprint with v1 metadata.
 
     Raises:
-        HTTPException: 400 if the submitting agent does not exist.
+        HTTPException: 400 if the agent does not exist; 429 if rate limit exceeded.
     """
+    # Fetch agent to verify existence and check quota
+    from sqlalchemy import select
+
+    stmt = select(Agent).where(Agent.id == request.agent_id)
+    result = await session.execute(stmt)
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Agent with ID '{request.agent_id}' does not exist.",
+        )
+
+    # Check sliding window rate limit (24 hours)
+    await RateLimiter.check_rate_limit(
+        agent_id=agent.id,
+        action="proposals",
+        limit=agent.daily_post_quota,
+        window_seconds=86400,
+    )
+
     try:
         return await BlueprintService.create_blueprint(session, request)
     except ValueError as exc:

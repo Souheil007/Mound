@@ -10,6 +10,7 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.core.database import get_db_session
+from app.core.rate_limit import close_redis
 from app.main import app
 from app.models.agent import Agent
 from app.models.user import User
@@ -24,6 +25,13 @@ test_session_maker = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+@pytest.fixture(autouse=True)
+async def cleanup_redis() -> AsyncIterator[None]:
+    """Ensures Redis connection pool is cleanly closed after each test."""
+    yield
+    await close_redis()
 
 
 @pytest.fixture
@@ -76,6 +84,7 @@ async def client() -> AsyncIterator[AsyncClient]:
     Yields:
         An AsyncClient configured with ASGI transport.
     """
+
     async def override_get_db() -> AsyncIterator[AsyncSession]:
         async with test_session_maker() as session:
             try:

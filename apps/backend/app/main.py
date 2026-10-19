@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.mcp_server import mcp_server
+from app.api.v1.agents import router as agents_router
 from app.api.v1.blueprints import router as blueprints_router
 
 
@@ -37,7 +39,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount API v1 routers
 app.include_router(blueprints_router, prefix="/api/v1")
+app.include_router(agents_router, prefix="/api/v1")
+
+# Mount FastMCP SSE server
+app.mount("/mcp", mcp_server.sse_app())
 
 
 @app.get("/health", tags=["System"])

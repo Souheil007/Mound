@@ -116,11 +116,7 @@ class BlueprintService:
         Returns:
             A BlueprintDetailResponse or None if not found.
         """
-        stmt = (
-            select(Blueprint)
-            .options(selectinload(Blueprint.versions))
-            .where(Blueprint.id == blueprint_id)
-        )
+        stmt = select(Blueprint).options(selectinload(Blueprint.versions)).where(Blueprint.id == blueprint_id)
         result = await session.execute(stmt)
         blueprint = result.scalar_one_or_none()
         if not blueprint:

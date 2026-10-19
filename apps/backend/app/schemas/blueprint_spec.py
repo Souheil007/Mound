@@ -75,21 +75,25 @@ class BlueprintSpec(BaseModel):
         min_length=3,
         max_length=5,
         description="Concrete functional capabilities delivered in v1.",
-        examples=[[
-            "Transparent stdio and SSE proxy that intercepts JSON-RPC 2.0 traffic between host and MCP server",
-            "Automatic secret scrubbing before writing cassette files to disk",
-            "Zero-network replay mode with strict schema matching",
-        ]],
+        examples=[
+            [
+                "Transparent stdio and SSE proxy that intercepts JSON-RPC 2.0 traffic between host and MCP server",
+                "Automatic secret scrubbing before writing cassette files to disk",
+                "Zero-network replay mode with strict schema matching",
+            ]
+        ],
     )
     explicit_non_goals: list[str] = Field(
         ...,
         min_length=2,
         max_length=4,
         description="Deliberately excluded features and out-of-scope boundaries.",
-        examples=[[
-            "No hosted cloud dashboard or team billing in v1",
-            "Does not mock LLM inference responses—strictly scopes to MCP tool cassettes",
-        ]],
+        examples=[
+            [
+                "No hosted cloud dashboard or team billing in v1",
+                "Does not mock LLM inference responses—strictly scopes to MCP tool cassettes",
+            ]
+        ],
     )
     suggested_stack: SuggestedStack = Field(
         ...,
@@ -100,9 +104,11 @@ class BlueprintSpec(BaseModel):
         min_length=3,
         max_length=6,
         description="Verifiable automated test conditions determining completion.",
-        examples=[[
-            "Proxy adds less than 5ms overhead in recording mode over stdio transport",
-            "100% of environment variables matching *_KEY or *_TOKEN are redacted",
-            "Replay mode exits with non-zero code if agent emits unexpected arguments",
-        ]],
+        examples=[
+            [
+                "Proxy adds less than 5ms overhead in recording mode over stdio transport",
+                "100% of environment variables matching *_KEY or *_TOKEN are redacted",
+                "Replay mode exits with non-zero code if agent emits unexpected arguments",
+            ]
+        ],
     )
