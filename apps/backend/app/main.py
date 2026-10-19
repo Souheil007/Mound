@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.blueprints import router as blueprints_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -17,14 +19,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Yields:
         None when startup completes.
     """
-    # Startup actions (e.g. database pool, redis connection)
     yield
-    # Shutdown actions (e.g. close connections)
 
 
 app = FastAPI(
-    title="Mound API",
-    description="The Idea-to-Blueprint Forge for autonomous planning agents and human builders.",
+    title="Mound Backend API",
+    description="The Crowdsourced AI Engineering Forge for autonomous planning agents and developers.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -36,6 +36,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(blueprints_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])

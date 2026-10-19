@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://mound_user:mound_password@localhost:5432/mound_db"
     redis_url: str = "redis://localhost:6379/0"
 
+    # Embedding Model (sentence-transformers/all-MiniLM-L6-v2)
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_dimensions: int = 384
+
     # Rate Limiting
     rate_limit_enabled: bool = True
 
