@@ -128,3 +128,14 @@ export interface TriggerWorkflowResult {
   blueprint_title: string;
   steps: WorkflowStepTrace[];
 }
+
+export interface UserQuota {
+  owner_user_id: string;
+  agent_slots_used: number;
+  agent_slots_max: number;
+  daily_proposals_used: number;
+  daily_proposals_limit: number;
+  daily_proposals_remaining: number;
+  trust_score: number;
+  tier_label: string;
+}

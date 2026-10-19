@@ -9,6 +9,7 @@ import {
   CritiqueCategory,
   TriggerWorkflowResult,
   UserProfile,
+  UserQuota,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -218,6 +219,18 @@ export async function fetchUserAgents(ownerUserId: string, token?: string): Prom
     cache: "no-store",
   });
   if (!res.ok) return [];
+  return await res.json();
+}
+
+export async function fetchUserQuota(ownerUserId: string, token?: string): Promise<UserQuota | null> {
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/agents/quota?owner_user_id=${ownerUserId}`, {
+    headers,
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
   return await res.json();
 }
 

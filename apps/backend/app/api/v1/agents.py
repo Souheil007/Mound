@@ -162,17 +162,39 @@ async def register_agent(
     )
 
 
+class UserQuotaResponse(BaseModel):
+    """Developer quota status covering active agent slots and 24h proposal limits."""
+
+    owner_user_id: uuid.UUID
+    agent_slots_used: int
+    agent_slots_max: int
+    daily_proposals_used: int
+    daily_proposals_limit: int
+    daily_proposals_remaining: int
+    trust_score: int
+    tier_label: str
+
+
+def get_user_daily_proposal_limit(trust_score: int = 0) -> int:
+    """Calculates daily proposal quota based on developer trust score."""
+    if trust_score >= 100:
+        return 10
+    if trust_score >= 50:
+        return 5
+    return 2
+
+
 @router.delete(
     "/{agent_id}",
     status_code=status.HTTP_200_OK,
-    summary="Revoke and delete a connected agent to free up quota slot",
+    summary="Revoke and delete a connected agent to free up quota slot and remove its blueprints",
 )
 async def delete_agent(
     agent_id: uuid.UUID,
     owner_user_id: uuid.UUID = Query(..., description="UUID of the agent owner"),
     session: AsyncSession = Depends(get_db_session),
-) -> dict[str, str]:
-    """Revokes an agent's credentials and deletes the agent record, immediately freeing up a slot."""
+) -> dict[str, Any]:
+    """Revokes an agent's credentials, cascades deletion of all blueprints created by this agent, and frees up an active agent slot."""
     stmt = select(Agent).where(Agent.id == agent_id, Agent.owner_id == owner_user_id)
     result = await session.execute(stmt)
     agent = result.scalar_one_or_none()
@@ -183,9 +205,61 @@ async def delete_agent(
             detail=f"Agent with ID '{agent_id}' not found or you do not have permission to delete it.",
         )
 
+    # 1. Cascade delete all blueprints created by this agent from Agora feed and search index
+    bp_stmt = select(Blueprint).where(Blueprint.creator_agent_id == agent.id)
+    bp_result = await session.execute(bp_stmt)
+    blueprints_to_delete = bp_result.scalars().all()
+    deleted_blueprints_count = len(blueprints_to_delete)
+    for bp in blueprints_to_delete:
+        await session.delete(bp)
+
+    # 2. Delete the agent record to free up slot
     await session.delete(agent)
     await session.commit()
-    return {"message": f"Agent '{agent.name}' successfully revoked and slot released."}
+    return {
+        "message": f"Agent '{agent.name}' successfully revoked. {deleted_blueprints_count} associated blueprint proposal(s) removed.",
+        "deleted_blueprints_count": deleted_blueprints_count,
+    }
+
+
+@router.get(
+    "/quota",
+    response_model=UserQuotaResponse,
+    summary="Get current user agent slot quota and 24-hour proposal rate limit status",
+)
+async def get_user_quota(
+    owner_user_id: uuid.UUID = Query(..., description="UUID of the developer"),
+    session: AsyncSession = Depends(get_db_session),
+) -> UserQuotaResponse:
+    """Retrieves slot capacity and daily proposal usage for the specified developer."""
+    user = await session.get(User, owner_user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID '{owner_user_id}' not found.",
+        )
+
+    from sqlalchemy import func
+    agents_count_stmt = select(func.count(Agent.id)).where(Agent.owner_id == user.id)
+    agent_slots_used = (await session.execute(agents_count_stmt)).scalar_one() or 0
+
+    max_slots = 25 if user.trust_score >= 100 else (10 if user.trust_score >= 50 else 3)
+    tier_label = "Tier 3 (Elite)" if user.trust_score >= 100 else ("Tier 2 (Pro)" if user.trust_score >= 50 else "Tier 1 (Standard)")
+
+    daily_proposals_limit = get_user_daily_proposal_limit(user.trust_score)
+    daily_proposals_used = await RateLimiter.get_user_rate_limit_usage(user.id, "proposals", 86400)
+    daily_proposals_remaining = max(0, daily_proposals_limit - daily_proposals_used)
+
+    return UserQuotaResponse(
+        owner_user_id=user.id,
+        agent_slots_used=agent_slots_used,
+        agent_slots_max=max_slots,
+        daily_proposals_used=daily_proposals_used,
+        daily_proposals_limit=daily_proposals_limit,
+        daily_proposals_remaining=daily_proposals_remaining,
+        trust_score=user.trust_score,
+        tier_label=tier_label,
+    )
 
 
 @router.get(

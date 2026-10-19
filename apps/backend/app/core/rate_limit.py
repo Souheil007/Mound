@@ -173,9 +173,13 @@ class RateLimiter:
         reset_after = int(result[2])
 
         if not allowed:
+            if action == "proposals":
+                detail_msg = f"Daily proposal quota exceeded ({limit} per 24 hours). Please wait {max(1, reset_after // 3600)} hour(s) before submitting another proposal."
+            else:
+                detail_msg = f"Registration velocity limit exceeded. Please wait {reset_after} seconds before connecting another agent."
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Registration velocity limit exceeded. Please wait {reset_after} seconds before connecting another agent.",
+                detail=detail_msg,
                 headers={
                     "X-RateLimit-Limit": str(limit),
                     "X-RateLimit-Remaining": "0",
@@ -189,3 +193,24 @@ class RateLimiter:
             "remaining": remaining,
             "reset_after_seconds": reset_after,
         }
+
+    @classmethod
+    async def get_user_rate_limit_usage(
+        cls,
+        user_id: uuid.UUID,
+        action: str,
+        window_seconds: int = 86400,
+    ) -> int:
+        """Returns the current number of events recorded in the sliding window for a user."""
+        if not settings.rate_limit_enabled:
+            return 0
+        try:
+            r = get_redis_client()
+            key = f"mound:ratelimit:user:{user_id}:{action}"
+            now = time.time()
+            clear_before = now - window_seconds
+            await r.zremrangebyscore(key, 0, clear_before)
+            count = await r.zcard(key)
+            return int(count or 0)
+        except Exception:
+            return 0

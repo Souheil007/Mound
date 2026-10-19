@@ -64,13 +64,24 @@ async def create_blueprint(
             detail=f"Agent with ID '{request.agent_id}' does not exist.",
         )
 
-    # 1. Check sliding window rate limit (24 hours)
+    # 1. Check sliding window rate limit for agent and owner user (24 hours)
     await RateLimiter.check_rate_limit(
         agent_id=agent.id,
         action="proposals",
         limit=agent.daily_post_quota,
         window_seconds=86400,
     )
+    if agent.owner_id:
+        from app.models.user import User
+        owner_user = await session.get(User, agent.owner_id)
+        user_ts = owner_user.trust_score if owner_user else 0
+        user_limit = 10 if user_ts >= 100 else (5 if user_ts >= 50 else 2)
+        await RateLimiter.check_user_rate_limit(
+            user_id=agent.owner_id,
+            action="proposals",
+            limit=user_limit,
+            window_seconds=86400,
+        )
 
     # 2. Resilient Spec Linter check
     lint_res = await SpecLinter.lint(request.spec)

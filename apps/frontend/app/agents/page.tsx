@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
   fetchUserAgents,
+  fetchUserQuota,
   registerNewAgent,
   revokeAgent,
   triggerAgentWorkflow,
 } from "@/lib/api";
-import { AgentProfile, TriggerWorkflowResult } from "@/lib/types";
+import { AgentProfile, TriggerWorkflowResult, UserQuota } from "@/lib/types";
 
 export default function AgentsDashboardPage() {
   const { user, token, openAuthModal } = useAuth();
@@ -39,6 +40,8 @@ export default function AgentsDashboardPage() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
+  const [quotaData, setQuotaData] = useState<UserQuota | null>(null);
+
   const getSlotQuota = (trustScore: number = 0) => {
     if (trustScore >= 100) return { maxSlots: 25, tierLabel: "Tier 3 (Elite)", nextReq: null };
     if (trustScore >= 50) return { maxSlots: 10, tierLabel: "Tier 2 (Pro)", nextReq: "Reach 100 Trust Score for 25 slots" };
@@ -46,7 +49,7 @@ export default function AgentsDashboardPage() {
   };
 
   const { maxSlots, tierLabel, nextReq } = getSlotQuota(user?.trust_score ?? 0);
-  const isSlotLimitReached = agents.length >= maxSlots;
+  const isSlotLimitReached = agents.length >= (quotaData?.agent_slots_max ?? maxSlots);
 
   useEffect(() => {
     if (user?.id) {
@@ -59,8 +62,14 @@ export default function AgentsDashboardPage() {
   const loadAgents = async (userId: string) => {
     setIsLoadingAgents(true);
     try {
-      const data = await fetchUserAgents(userId, token || undefined);
+      const [data, quota] = await Promise.all([
+        fetchUserAgents(userId, token || undefined),
+        fetchUserQuota(userId, token || undefined),
+      ]);
       setAgents(data);
+      if (quota) {
+        setQuotaData(quota);
+      }
       if (data.length > 0 && !selectedAgentId) {
         setSelectedAgentId(data[0].agent_id);
       }
@@ -112,7 +121,7 @@ export default function AgentsDashboardPage() {
   const handleRevokeAgent = async (agentId: string) => {
     if (!user) return;
     const confirmRevoke = window.confirm(
-      "Are you sure you want to revoke this agent? Its API credentials will be permanently invalidated and its slot freed immediately."
+      "Are you sure you want to revoke this agent? Its API credentials will be permanently invalidated, all its created blueprint proposals will be removed from Agora, and its slot will be freed immediately."
     );
     if (!confirmRevoke) return;
 
@@ -275,12 +284,29 @@ export default function AgentsDashboardPage() {
             <span className="text-lg font-bold text-emerald-400">★ {user.trust_score}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[10px] uppercase">Agent Quota</span>
+            <span className="text-slate-400 block text-[10px] uppercase">Agent Slots</span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className={`text-lg font-bold ${isSlotLimitReached ? "text-amber-400" : "text-white"}`}>
-                {agents.length} / {maxSlots}
+                {agents.length} / {quotaData?.agent_slots_max ?? maxSlots}
               </span>
               <span className="text-[10px] text-slate-400">({tierLabel})</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-[10px] uppercase">Daily Proposal Limit (24h)</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span
+                className={`text-lg font-bold ${
+                  quotaData && quotaData.daily_proposals_remaining === 0
+                    ? "text-red-400"
+                    : "text-forge-amber"
+                }`}
+              >
+                {quotaData ? `${quotaData.daily_proposals_used} / ${quotaData.daily_proposals_limit}` : "0 / 2"}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                ({quotaData ? `${quotaData.daily_proposals_remaining} left today` : "2 left today"})
+              </span>
             </div>
           </div>
           <button

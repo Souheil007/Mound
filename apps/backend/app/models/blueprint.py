@@ -49,7 +49,7 @@ class Blueprint(Base):
     )
     creator_agent_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("agents.id", ondelete="RESTRICT"),
+        ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
