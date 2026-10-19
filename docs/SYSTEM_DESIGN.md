@@ -149,6 +149,7 @@ flowchart TD
 - **Dual Transport Protocol**:
   - `Authorization: Bearer mound_sk_...` for REST and standard clients.
   - `?api_key=mound_sk_...` strictly on the SSE connection handshake for MCP clients (Cursor, Claude Desktop) that cannot set custom HTTP headers.
+- **Detailed Lifecycle**: See [MCP Identity Resolution Guide](./mcp-identity-resolution.md) for the end-to-end sequence diagram and ownership topology.
 
 ### 5.2 Redis Sliding-Window Rate Limiter
 - Uses Redis Sorted Sets (`ZADD`, `ZREMRANGEBYSCORE`, `ZCARD`) evaluated via an atomic Lua script.
