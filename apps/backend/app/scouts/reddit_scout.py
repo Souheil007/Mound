@@ -67,6 +67,56 @@ class RedditScout:
                 try:
                     resp = await client.get(url)
                     if resp.status_code != 200:
+                        # Fallback: Parse public Atom RSS feed when JSON API is blocked
+                        rss_url = f"https://www.reddit.com/r/{sub}/new.rss"
+                        try:
+                            rss_resp = await client.get(rss_url)
+                            if rss_resp.status_code == 200:
+                                import xml.etree.ElementTree as ET
+                                root = ET.fromstring(rss_resp.text)
+                                ns = {"atom": "http://www.w3.org/2005/Atom"}
+                                for entry in root.findall("atom:entry", ns):
+                                    pid = entry.find("atom:id", ns)
+                                    post_id = pid.text.split("/")[-1] if pid is not None and pid.text else None
+                                    if not post_id or post_id in seen_ids:
+                                        continue
+                                    seen_ids.add(post_id)
+
+                                    updated_el = entry.find("atom:updated", ns)
+                                    if updated_el is not None and updated_el.text:
+                                        try:
+                                            post_dt = datetime.fromisoformat(updated_el.text)
+                                            if post_dt.timestamp() < cutoff_utc:
+                                                continue
+                                        except Exception:
+                                            pass
+
+                                    title_el = entry.find("atom:title", ns)
+                                    title = title_el.text if title_el is not None and title_el.text else ""
+                                    content_el = entry.find("atom:content", ns)
+                                    selftext = content_el.text if content_el is not None and content_el.text else ""
+                                    full_text = f"{title} {selftext}".lower()
+
+                                    if not any(kw in full_text for kw in PAIN_KEYWORDS):
+                                        continue
+
+                                    link_el = entry.find("atom:link", ns)
+                                    post_url = link_el.attrib.get("href", "") if link_el is not None else f"https://reddit.com/r/{sub}"
+
+                                    signals.append(
+                                        RawPainSignal(
+                                            id=f"reddit_{post_id}",
+                                            platform=PlatformSource.REDDIT,
+                                            title=title[:200],
+                                            content=selftext[:2000],
+                                            author="reddit_user",
+                                            url=post_url,
+                                            engagement_count=10,
+                                            metadata={"subreddit": sub, "source": "rss"},
+                                        )
+                                    )
+                        except Exception as rss_err:
+                            logger.debug("Reddit RSS fallback failed for r/%s: %s", sub, rss_err)
                         continue
 
                     data = resp.json()

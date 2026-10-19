@@ -91,8 +91,8 @@ WILLINGNESS_TO_PAY_INDICATORS = [
 class OpportunityEvaluator:
     """Evaluates raw pain signals against the 4-dimensional Billion-Dollar Rubric."""
 
-    MIN_PASSING_TOTAL = 80
-    MIN_DIMENSION_SCORE = 16
+    MIN_PASSING_TOTAL = 75
+    MIN_DIMENSION_SCORE = 14
 
     @classmethod
     def evaluate(cls, signal: RawPainSignal) -> OpportunityEvaluation:

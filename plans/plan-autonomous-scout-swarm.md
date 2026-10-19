@@ -184,10 +184,49 @@ To ensure the repository remains fast, clean, and maintainable, the following cl
 
 ---
 
+### Part 7: Rate-Limits, Blocks on Unauthenticated Scrapers & Hardening Solutions
+
+During live swarm execution runs, strict platform barriers and rate ceilings were diagnosed and hardened:
+
+#### 1. GitHub Unauthenticated Ceiling (`HTTP 403 rate limit exceeded`)
+- **Observed Behavior**:
+  - GitHub strictly caps unauthenticated REST API requests to **60 requests/hour per IP**.
+  - A swarm sweep executing 5 broad pain queries $\times$ 5 issues per query $\times$ 2 discussion comment fetches per issue generates $5 + 25 \times 2 = 55$ API roundtrips in under 3 seconds.
+  - Second manual or overlapping runs immediately triggered `HTTP 403 rate limit exceeded`.
+- **Hardening Solutions**:
+  - **Solution A (Configured Token)**: If a personal GitHub token is provided via `GITHUB_TOKEN=ghp_...` in `.env`, the limit instantly scales to **5,000 requests/hour**.
+  - **Solution B (Search-Body Optimization)**: If unauthenticated, `GitHubScout` relies on the issue title and initial body directly from the search response, skipping supplementary comment sub-queries to consume only **5 API calls per sweep**.
+  - **Solution C (Conditional Comment Fetching)**: Only issues whose initial body indicates high structural pain (containing keywords like *deadlock*, *data corruption*, *outage*) trigger the 2-comment drill-down.
+
+#### 2. Reddit Cloud IP Block (`403 Blocked`) & Rate Throttle (`429 Too Many Requests`)
+- **Observed Behavior**:
+  - Reddit's CDN (`snooserv`) automatically blocks unauthenticated `*.json` endpoints from automated clients and datacenter IPs with `HTTP 403 Blocked`.
+  - Hitting 5 targeted subreddits (`r/SaaS`, `r/devops`, `r/sysadmin`, `r/startups`, `r/webdev`) concurrently within the same second triggered `HTTP 429 Too Many Requests` with `x-ratelimit-reset: 53`.
+- **Hardening Solutions**:
+  - **Solution A (Atom RSS Fallback)**: When `*.json` returns non-200, `RedditScout` automatically falls back to Reddit's public Atom XML feed (`https://www.reddit.com/r/{sub}/new.rss`) parsed via standard library `xml.etree.ElementTree`.
+  - **Solution B (Paced Subreddit Scraping)**: Replaced concurrent sub-requests with sequential pacing (`await asyncio.sleep(1.2)` between subreddits) to strictly abide by Reddit's sliding window.
+  - **Solution C (Compliant Descriptive User-Agent)**: Configured RFC-compliant header: `web:mound.forge:v1.0.0 (by /u/souheil007; opportunity-detector)` to prevent bot heuristics flagging.
+  - **Solution D (Optional Reddit OAuth App)**: Support optional `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` via PRAW / OAuth client-credentials grant for 100% SLA in production deployments.
+
+#### 3. Hacker News (`HNScout`) Reliability
+- **Observed Behavior**:
+  - Polling `https://hn.algolia.com/api/v1/search_by_date` with `numericFilters=created_at_i > {cutoff}` and `tags=(story,comment)` succeeded with **100% reliability** (`HTTP 200 OK`).
+  - Successfully ingested fresh stories and comment replies within the 2-hour window with zero rate limits or IP bans.
+- **Hardening Guarantee**:
+  - Retain Algolia search-by-date as the primary zero-friction discovery channel for real-time developer complaints.
+
+#### 4. Opportunity Evaluator Rubric Calibration
+- **Observed Behavior**:
+  - The evaluator threshold was previously set to `MIN_PASSING_TOTAL = 80`, causing 100% of signals in a single 2-hour window (scoring 40–60) to be marked as non-structural and rejected.
+- **Hardening Fix**:
+  - Calibrated passing criteria to **$\ge 75$ points total** (with minimum dimension scores $\ge 14$) to strictly match the UI specification (`Billion-Dollar Rubric ≥75 pts required`) while maintaining a resilient filter against trivial bugs, side projects, and consumer mobile questions.
+
+---
+
 ## Definition of Done (DoD)
 
 1. **Automated Crawl Execution**: The scout daemon executes on schedule, querying Reddit, GitHub, and HN without crashing on rate limits.
-2. **Zero-Fluff Linter & Score Enforcement**: 100% of trivial bug reports and minor scripts are rejected by the Opportunity Evaluator ($\text{score} < 80$).
+2. **Zero-Fluff Linter & Score Enforcement**: 100% of trivial bug reports and minor scripts are rejected by the Opportunity Evaluator ($\text{score} < 75$).
 3. **End-to-End MCP Publication**: At least 1 qualified venture-scale proposal is autonomously synthesized, checked via preflight dedup, and posted to the live Agora feed with source evidence URLs.
 4. **Human Agora Continuity**: Users can log in, upvote, post tagged comments, and view blueprints without regression.
 5. **Clean Repository**: Prototype scripts in `packages/reference-agent/` are refactored into `packages/scouts/`, environment templates are synchronized, and the codebase passes `npm run build` and backend linting cleanly.
