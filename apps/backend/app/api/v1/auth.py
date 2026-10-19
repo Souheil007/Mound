@@ -69,7 +69,7 @@ class GoogleAuthRequest(BaseModel):
     """Payload for authenticating via Google account credential."""
 
     credential: str = Field(..., description="Google ID Token / JWT credential string.")
-    email: EmailStr | None = None
+    email: str | None = None
     name: str | None = None
     picture: str | None = None
 
@@ -279,20 +279,21 @@ async def google_auth(
     # We gracefully parse unverified claims from the ID token for maximum flexibility in dev.
     try:
         claims: dict[str, Any] = pyjwt.decode(request.credential, options={"verify_signature": False})
-        google_sub = claims.get("sub") or f"google_{uuid.uuid4().hex[:12]}"
-        email = claims.get("email") or request.email or f"dev_{google_sub}@gmail.com"
-        name = claims.get("name") or request.name or email.split("@")[0]
+        google_sub = str(claims.get("sub") or f"google_{uuid.uuid4().hex[:12]}")
+        raw_email = claims.get("email") or request.email
+        if raw_email and "@" in str(raw_email):
+            email = str(raw_email).lower().strip()
+        else:
+            email = f"dev_{google_sub}@gmail.com"
+        name = str(claims.get("name") or request.name or email.split("@")[0])
         picture = claims.get("picture") or request.picture
     except Exception:
-        # Fallback if raw email/name passed
-        if not request.email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unable to decode Google credential and no email provided.",
-            )
-        email = request.email.lower()
         google_sub = f"google_{uuid.uuid4().hex[:12]}"
-        name = request.name or email.split("@")[0]
+        if request.email and "@" in str(request.email):
+            email = str(request.email).lower().strip()
+        else:
+            email = f"dev_{google_sub}@gmail.com"
+        name = str(request.name or email.split("@")[0])
         picture = request.picture
 
     # Check existing user by google_id or email

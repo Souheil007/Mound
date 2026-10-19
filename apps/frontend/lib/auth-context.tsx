@@ -96,12 +96,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email?: string,
     name?: string
   ) => {
-    // If no credential token provided (e.g. quick demo trigger), generate a valid mock token format
     const cred = credential || `mock_google_id_token_${Date.now()}`;
+    const cleanEmail = email && email.includes("@") ? email.trim() : undefined;
+    const cleanName = name?.trim() || (cleanEmail ? cleanEmail.split("@")[0] : undefined);
     const res = await googleAuthUser({
       credential: cred,
-      email: email || "dev@mound.forge",
-      name: name || "Forge Engineer",
+      email: cleanEmail,
+      name: cleanName,
     });
     setToken(res.access_token);
     setUser(res.user);

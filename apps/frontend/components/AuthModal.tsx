@@ -83,9 +83,9 @@ export default function AuthModal() {
     setErrorMsg(null);
     setIsSubmitting(true);
     try {
-      // In production with Google Identity Services SDK, render the GIS button or call GIS prompt.
-      // In local dev, authenticates directly via the backend's Google OAuth flow.
-      await googleLogin(undefined, email || "engineer@google.com", username || "Cloud Engineer");
+      const validEmail = email && email.includes("@") ? email.trim() : undefined;
+      const validName = username ? username.trim() : undefined;
+      await googleLogin(undefined, validEmail, validName);
     } catch (err: any) {
       setErrorMsg(err.message || "Google sign-in failed");
     } finally {
