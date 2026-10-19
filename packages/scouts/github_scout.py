@@ -13,16 +13,16 @@ logger = logging.getLogger(__name__)
 GITHUB_SEARCH_URL = "https://api.github.com/search/issues"
 
 GITHUB_SEARCH_QUERIES = [
-    'is:issue is:open comments:>25 "production outage" OR "data loss" in:title,body',
-    'is:issue is:open comments:>25 "cloud bill" OR "finops" OR "expensive" label:"infrastructure"',
-    'is:issue is:open comments:>25 "connection pool" OR "failover deadlock" in:title,body',
-    'is:issue is:open comments:>25 "soc2" OR "hipaa" OR "compliance audit" in:title,body',
-    'is:issue is:open comments:>25 "schema drift" OR "cdc pipeline" in:title,body',
+    'is:issue is:open comments:>5 "production outage" OR "data loss" in:title,body',
+    'is:issue is:open comments:>5 "cloud bill" OR "finops" OR "expensive" label:"infrastructure"',
+    'is:issue is:open comments:>5 "connection pool" OR "failover deadlock" in:title,body',
+    'is:issue is:open comments:>5 "soc2" OR "hipaa" OR "compliance audit" in:title,body',
+    'is:issue is:open comments:>5 "schema drift" OR "cdc pipeline" in:title,body',
 ]
 
 
 class GitHubScout:
-    """Scout crawler searching GitHub for deep architectural bottlenecks with hundreds of developer reactions."""
+    """Scout crawler searching GitHub for deep architectural bottlenecks with community discussion."""
 
     def __init__(self, github_token: str | None = None, timeout_seconds: float = 10.0):
         self.timeout_seconds = timeout_seconds
@@ -35,7 +35,7 @@ class GitHubScout:
         self.headers = headers
 
     async def fetch_signals(self, limit_per_query: int = 5, window_hours: int = 2) -> list[RawPainSignal]:
-        """Queries GitHub Issues search API for structural architectural gaps active within the timelapse.
+        """Queries GitHub Issues search API for structural architectural gaps and recent discussion comments.
 
         Args:
             limit_per_query: Max issues to inspect per query keyword.
@@ -81,31 +81,71 @@ class GitHubScout:
 
                         title = issue.get("title", "")
                         body = issue.get("body", "") or ""
-                        if len(body) < 120:
-                            continue
-
                         html_url = issue.get("html_url", "")
-                        comments = issue.get("comments", 0)
+                        comments_count = issue.get("comments", 0)
                         reactions = issue.get("reactions", {}).get("total_count", 0)
                         user = issue.get("user", {}).get("login", "anonymous")
 
-                        signals.append(
-                            RawPainSignal(
-                                id=f"gh_{issue_id}",
-                                platform=PlatformSource.GITHUB,
-                                title=title[:200],
-                                content=body[:2000],
-                                author=user,
-                                url=html_url,
-                                engagement_count=int(reactions + comments),
-                                metadata={
-                                    "reactions": reactions,
-                                    "comments": comments,
-                                    "updated_at": updated_at_str,
-                                    "repository_url": issue.get("repository_url"),
-                                },
+                        # 1. Ingest Main Issue Post if substantive
+                        if len(body) >= 100:
+                            signals.append(
+                                RawPainSignal(
+                                    id=f"gh_issue_{issue_id}",
+                                    platform=PlatformSource.GITHUB,
+                                    title=title[:200],
+                                    content=body[:2000],
+                                    author=user,
+                                    url=html_url,
+                                    engagement_count=int(reactions + comments_count),
+                                    metadata={
+                                        "type": "issue_post",
+                                        "reactions": reactions,
+                                        "comments": comments_count,
+                                        "updated_at": updated_at_str,
+                                        "repository_url": issue.get("repository_url"),
+                                    },
+                                )
                             )
-                        )
+
+                        # 2. Ingest Latest Comments under this actively updated issue
+                        comments_url = issue.get("comments_url")
+                        if comments_count > 0 and comments_url:
+                            try:
+                                c_resp = await client.get(f"{comments_url}?per_page=2&sort=created&direction=desc")
+                                if c_resp.status_code == 200:
+                                    for c_data in c_resp.json():
+                                        c_id = str(c_data.get("id"))
+                                        if c_id in seen_ids:
+                                            continue
+                                        seen_ids.add(c_id)
+
+                                        c_body = c_data.get("body", "") or ""
+                                        c_author = c_data.get("user", {}).get("login", "anonymous")
+                                        c_url = c_data.get("html_url") or html_url
+
+                                        # Skip automated bot comments or trivial one-liners
+                                        if len(c_body) < 100 or "[bot]" in c_author:
+                                            continue
+
+                                        signals.append(
+                                            RawPainSignal(
+                                                id=f"gh_comment_{c_id}",
+                                                platform=PlatformSource.GITHUB,
+                                                title=f"Re: {title[:160]}",
+                                                content=c_body[:2000],
+                                                author=c_author,
+                                                url=c_url,
+                                                engagement_count=int(reactions + comments_count),
+                                                metadata={
+                                                    "type": "issue_comment",
+                                                    "parent_issue": html_url,
+                                                    "created_at": c_data.get("created_at"),
+                                                },
+                                            )
+                                        )
+                            except Exception as c_exc:
+                                logger.debug("Failed to fetch comments for issue %s: %s", issue_id, c_exc)
+
                 except Exception as exc:
                     logger.warning("GitHubScout query '%s' failed: %s", query, exc)
                     continue
