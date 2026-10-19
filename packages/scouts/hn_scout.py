@@ -1,25 +1,26 @@
 """Hacker News Scout module querying Algolia HN API for real-time developer complaints."""
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
 
-from packages.scouts.models import PlatformSource, RawPainSignal
+from app.scouts.models import PlatformSource, RawPainSignal
 
 logger = logging.getLogger(__name__)
 
-HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search"
+# Use search_by_date endpoint to ensure strictly recency-sorted results
+HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search_by_date"
 
-# Targeted queries tuned for structural business and architectural pain
 SEARCH_QUERIES = [
-    "Ask HN software wish existed",
-    "Ask HN biggest pain point",
-    "SaaS expensive alternatives",
-    "hate using software",
-    "manual spreadsheet hours",
-    "cloud bill outrageous",
-    "compliance nightmare SOC2",
+    "Ask HN",
+    "cloud bill",
+    "outage",
+    "database cluster",
+    "SOC2 compliance",
+    "SaaS expensive",
+    "data loss",
 ]
 
 
@@ -30,17 +31,20 @@ class HNScout:
         self.timeout_seconds = timeout_seconds
         self.headers = {"User-Agent": "MoundScout/1.0 (+https://mound.dev; opportunity-detector)"}
 
-    async def fetch_signals(self, limit_per_query: int = 5) -> list[RawPainSignal]:
-        """Fetches recent viral complaints from Hacker News discussions.
+    async def fetch_signals(self, limit_per_query: int = 5, window_hours: int = 2) -> list[RawPainSignal]:
+        """Fetches viral complaints from Hacker News created strictly within the timelapse window.
 
         Args:
             limit_per_query: Max items to inspect per query keyword.
+            window_hours: Maximum age of posts in hours (default 2 hours).
 
         Returns:
-            List of normalized RawPainSignal objects.
+            List of normalized RawPainSignal objects within the timelapse window.
         """
         signals: list[RawPainSignal] = []
         seen_ids: set[str] = set()
+
+        cutoff_ts = int((datetime.now(timezone.utc) - timedelta(hours=window_hours)).timestamp())
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers) as client:
             for query in SEARCH_QUERIES:
@@ -48,6 +52,7 @@ class HNScout:
                     params: dict[str, Any] = {
                         "query": query,
                         "tags": "(story,comment)",
+                        "numericFilters": f"created_at_i>{cutoff_ts}",
                         "hitsPerPage": limit_per_query,
                     }
                     resp = await client.get(HN_SEARCH_URL, params=params)
@@ -70,7 +75,7 @@ class HNScout:
 
                         # Require minimum substantive complaint length
                         body = comment_text if comment_text else title
-                        if len(body) < 100:
+                        if len(body) < 80:
                             continue
 
                         hn_url = f"https://news.ycombinator.com/item?id={object_id}"

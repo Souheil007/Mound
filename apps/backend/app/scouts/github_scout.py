@@ -1,6 +1,7 @@
 """GitHub Scout module querying GitHub Issues API for top requested features and enterprise gaps."""
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -11,12 +12,12 @@ logger = logging.getLogger(__name__)
 
 GITHUB_SEARCH_URL = "https://api.github.com/search/issues"
 
-# Targeted GitHub search queries focusing on unresolved, heavily reacted feature requests and architectural gaps
 GITHUB_SEARCH_QUERIES = [
-    'is:issue is:open comments:>20 "out of scope" label:"feature-request"',
-    'is:issue is:open reactions:>50 "pain" label:"enhancement"',
-    'is:issue is:open comments:>30 "expensive" in:title,body',
-    'is:issue is:open reactions:>100 "workaround" in:title,body',
+    'is:issue is:open comments:>25 "production outage" OR "data loss" in:title,body',
+    'is:issue is:open comments:>25 "cloud bill" OR "finops" OR "expensive" label:"infrastructure"',
+    'is:issue is:open comments:>25 "connection pool" OR "failover deadlock" in:title,body',
+    'is:issue is:open comments:>25 "soc2" OR "hipaa" OR "compliance audit" in:title,body',
+    'is:issue is:open comments:>25 "schema drift" OR "cdc pipeline" in:title,body',
 ]
 
 
@@ -33,24 +34,27 @@ class GitHubScout:
             headers["Authorization"] = f"Bearer {github_token}"
         self.headers = headers
 
-    async def fetch_signals(self, limit_per_query: int = 5) -> list[RawPainSignal]:
-        """Queries GitHub Issues search API for structural architectural gaps.
+    async def fetch_signals(self, limit_per_query: int = 5, window_hours: int = 2) -> list[RawPainSignal]:
+        """Queries GitHub Issues search API for structural architectural gaps active within the timelapse.
 
         Args:
             limit_per_query: Max issues to inspect per query keyword.
+            window_hours: Maximum age of activity in hours (default 2 hours).
 
         Returns:
-            List of normalized RawPainSignal objects.
+            List of normalized RawPainSignal objects active within the timelapse window.
         """
         signals: list[RawPainSignal] = []
         seen_ids: set[str] = set()
+
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=window_hours)
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers) as client:
             for query in GITHUB_SEARCH_QUERIES:
                 try:
                     params: dict[str, Any] = {
                         "q": query,
-                        "sort": "reactions",
+                        "sort": "updated",
                         "order": "desc",
                         "per_page": limit_per_query,
                     }
@@ -64,6 +68,16 @@ class GitHubScout:
                         if issue_id in seen_ids:
                             continue
                         seen_ids.add(issue_id)
+
+                        # Enforce timelapse cutoff on updated_at
+                        updated_at_str = issue.get("updated_at")
+                        if updated_at_str:
+                            try:
+                                updated_dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                                if updated_dt < cutoff_dt:
+                                    continue
+                            except Exception:
+                                pass
 
                         title = issue.get("title", "")
                         body = issue.get("body", "") or ""
@@ -87,6 +101,7 @@ class GitHubScout:
                                 metadata={
                                     "reactions": reactions,
                                     "comments": comments,
+                                    "updated_at": updated_at_str,
                                     "repository_url": issue.get("repository_url"),
                                 },
                             )

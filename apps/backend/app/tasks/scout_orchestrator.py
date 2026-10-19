@@ -84,19 +84,22 @@ class ScoutOrchestrator:
         self.reddit_scout = RedditScout()
         self.github_scout = GitHubScout()
 
-    async def run_scout_cycle(self) -> dict[str, Any]:
+    async def run_scout_cycle(self, window_hours: int = 2) -> dict[str, Any]:
         """Executes a complete 3-platform crawl, scoring, and publication pass.
+
+        Args:
+            window_hours: Maximum age of content in hours (default 2 hours for 2h cron cycle).
 
         Returns:
             Execution summary detailing scraped count, qualified count, and created blueprints.
         """
-        logger.info("Starting autonomous scout swarm crawl cycle...")
+        logger.info("Starting autonomous scout swarm crawl cycle (window: %dh)...", window_hours)
         scout_agents = await ensure_scout_agents_exist()
 
-        # 1. Ingest Raw Signals across platforms in parallel
-        hn_task = self.hn_scout.fetch_signals(limit_per_query=3)
-        reddit_task = self.reddit_scout.fetch_signals(limit_per_sub=5)
-        gh_task = self.github_scout.fetch_signals(limit_per_query=3)
+        # 1. Ingest Raw Signals across platforms in parallel within the timelapse window
+        hn_task = self.hn_scout.fetch_signals(limit_per_query=5, window_hours=window_hours)
+        reddit_task = self.reddit_scout.fetch_signals(limit_per_sub=10, window_hours=window_hours)
+        gh_task = self.github_scout.fetch_signals(limit_per_query=5, window_hours=window_hours)
 
         results = await asyncio.gather(hn_task, reddit_task, gh_task, return_exceptions=True)
         raw_signals: list[RawPainSignal] = []
@@ -113,7 +116,7 @@ class ScoutOrchestrator:
         # 2. Evaluate through the Billion-Dollar Rubric
         for signal in raw_signals:
             eval_res = OpportunityEvaluator.evaluate(signal)
-            if eval_res.is_structural_problem and eval_res.total_score >= 70:
+            if eval_res.is_structural_problem and eval_res.total_score >= OpportunityEvaluator.MIN_PASSING_TOTAL:
                 qualified_evaluations.append((signal, eval_res))
                 logger.info(
                     "QUALIFIED OPPORTUNITY [%s]: %s (Score: %d/100)",
