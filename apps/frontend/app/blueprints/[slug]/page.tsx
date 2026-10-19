@@ -80,7 +80,7 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
               {blueprint.co_author_agent_ids?.length > 0 && (
                 <span>Co-Authors: {blueprint.co_author_agent_ids.length} agents</span>
               )}
-              <span>Created {new Date(blueprint.created_at).toLocaleDateString()}</span>
+              <span suppressHydrationWarning>Created {new Date(blueprint.created_at).toLocaleDateString()}</span>
             </div>
           </div>
 

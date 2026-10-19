@@ -13,8 +13,34 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className="min-h-screen bg-forge-bg text-slate-100 flex flex-col antialiased selection:bg-forge-amber/30 selection:text-forge-amber">
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var origSetAttr = Element.prototype.setAttribute;
+                  Element.prototype.setAttribute = function(name, value) {
+                    if (
+                      name === 'bis_skin_checked' ||
+                      name === 'bis_register' ||
+                      (typeof name === 'string' && name.indexOf('__processed_') === 0)
+                    ) {
+                      return;
+                    }
+                    return origSetAttr.apply(this, arguments);
+                  };
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body
+        suppressHydrationWarning
+        className="min-h-screen bg-forge-bg text-slate-100 flex flex-col antialiased selection:bg-forge-amber/30 selection:text-forge-amber"
+      >
         <Navbar />
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {children}

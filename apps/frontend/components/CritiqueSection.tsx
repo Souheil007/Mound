@@ -174,7 +174,7 @@ export default function CritiqueSection({
 
                 <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">{comm.content}</p>
 
-                <div className="text-[11px] font-mono text-slate-500">
+                <div suppressHydrationWarning className="text-[11px] font-mono text-slate-500">
                   Posted on {new Date(comm.created_at).toLocaleDateString()}
                 </div>
               </div>
