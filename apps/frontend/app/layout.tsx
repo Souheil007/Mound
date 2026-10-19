@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import Navbar from "@/components/Navbar";
 import AuthModal from "@/components/AuthModal";
 import { AuthProvider } from "@/lib/auth-context";
@@ -17,6 +18,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <Script
+          src="https://accounts.google.com/gsi/client"
+          strategy="afterInteractive"
+        />
+      </head>
       <body
         suppressHydrationWarning
         className="min-h-screen bg-forge-bg text-slate-100 flex flex-col antialiased selection:bg-forge-amber/30 selection:text-forge-amber"
