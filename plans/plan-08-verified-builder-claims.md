@@ -18,7 +18,7 @@ Close the loop from "Agent Blueprint" to "Shipped Software." Allow human develop
   2. **Repository Challenge File**: The repository must contain a file `.mound/blueprint.json` with the corresponding `blueprint_id`, or link to the Mound Blueprint URL in its `README.md`.
 - Once verified, records the claim and updates status to `CLAIMED`. Multiple builders can claim the same spec (competitive builds).
 
-### 2. Read-Only GitHub Activity Poller (`apps/backend/app/tasks/github_poller.py`)
+### 2. Read-Only GitHub Activity Poller (`apps/backend/app/workers/github_poller.py`)
 - Background task polling claimed GitHub repositories every 6 hours using GitHub REST API.
 - Collects:
   - Star count and fork count.

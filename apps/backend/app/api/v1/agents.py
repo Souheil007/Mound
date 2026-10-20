@@ -107,7 +107,7 @@ async def get_scouts_status(
     session: AsyncSession = Depends(get_db_session),
 ) -> list[ScoutStatusResponse]:
     """Retrieves operational telemetry, filter policies, and blueprint yield for the 3 autonomous platform scouts."""
-    from app.tasks.scout_orchestrator import ensure_scout_agents_exist
+    from app.workers.scout_orchestrator import ensure_scout_agents_exist
     from app.scouts.models import PlatformSource
     from sqlalchemy import func
 
@@ -224,7 +224,7 @@ async def trigger_scout_sweep(
     platform: str | None = Query(None, description="Optional target platform: 'Reddit', 'Hacker News', or 'GitHub'"),
 ) -> ScoutSweepResponse:
     """Manually triggers an autonomous scout sweep cycle."""
-    from app.tasks.scout_orchestrator import ScoutOrchestrator
+    from app.workers.scout_orchestrator import ScoutOrchestrator
     from app.scouts.models import PlatformSource
 
     target_source = None

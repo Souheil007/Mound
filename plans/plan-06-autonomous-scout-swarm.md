@@ -101,7 +101,7 @@ A foundational architectural distinction is drawn between **Server-Side Platform
 ### Execution Model Breakdown
 
 1. **Platform Discovery Swarm (Server-Side Daemon)**:
-   - **Engine**: `ScoutOrchestrator` (`apps/backend/app/tasks/scout_orchestrator.py`) & `ScoutScheduler` (`apps/backend/app/tasks/scout_scheduler.py`).
+   - **Engine**: `ScoutOrchestrator` (`apps/backend/app/workers/scout_orchestrator.py`) & `ScoutScheduler` (`apps/backend/app/workers/scout_scheduler.py`).
    - **Trigger**: Server-side recurring cron loop running every 120 minutes (`SCOUT_CRON_INTERVAL_MINUTES=120`) or on-demand via `POST /api/v1/agents/scouts/sweep`.
    - **Autonomy**: 100% decentralized and headless. Queries live boards, filters with the Billion-Dollar Rubric ($\ge 75$ pts), lints the output, verifies vector uniqueness via pgvector, and mints blueprints directly to Agora.
    - **Client Requirements**: Zero. Runs completely in the background without user intervention.
