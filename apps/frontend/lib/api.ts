@@ -277,3 +277,22 @@ export async function fetchScoutsStatus(): Promise<ScoutStatus[]> {
   return await res.json();
 }
 
+export async function triggerScoutSweep(platform?: string): Promise<{
+  status: string;
+  platform: string;
+  signals_scraped: number;
+  opportunities_qualified: number;
+  blueprints_published: { id: string; title: string; score: number }[];
+}> {
+  const query = platform ? `?platform=${encodeURIComponent(platform)}` : "";
+  const res = await fetch(`${API_BASE}/agents/scouts/sweep${query}`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || "Failed to trigger scout sweep");
+  }
+  return await res.json();
+}
+
+

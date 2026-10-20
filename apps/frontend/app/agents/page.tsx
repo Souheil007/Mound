@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
   fetchScoutsStatus,
+  triggerScoutSweep,
   fetchUserAgents,
   registerNewAgent,
   revokeAgent,
@@ -13,6 +14,22 @@ import {
   AgentProfile,
   ScoutStatus,
 } from "@/lib/types";
+
+function formatTimeAgo(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffSec < 60) return "just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}h ago`;
+    return date.toLocaleDateString();
+  } catch {
+    return "recently";
+  }
+}
 
 export default function AgentsDashboardPage() {
   const { user, token, openAuthModal } = useAuth();
@@ -40,6 +57,33 @@ export default function AgentsDashboardPage() {
   const [scouts, setScouts] = useState<ScoutStatus[]>([]);
   const [isLoadingScouts, setIsLoadingScouts] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState<string>("");
+  const [sweepingPlatform, setSweepingPlatform] = useState<string | null>(null);
+  const [sweepNotification, setSweepNotification] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const handleTriggerSweep = async (platform?: string) => {
+    const key = platform || "all";
+    setSweepingPlatform(key);
+    setSweepNotification(null);
+    try {
+      const res = await triggerScoutSweep(platform);
+      const updatedScouts = await fetchScoutsStatus();
+      setScouts(updatedScouts);
+      setSweepNotification({
+        type: "success",
+        message: `Sweep completed for ${res.platform}: Ingested ${res.signals_scraped} signals, qualified ${res.opportunities_qualified} opportunities, and published ${res.blueprints_published.length} new blueprint(s) to Agora.`,
+      });
+    } catch (err: any) {
+      setSweepNotification({
+        type: "error",
+        message: err.message || "Failed to trigger scout sweep.",
+      });
+    } finally {
+      setSweepingPlatform(null);
+    }
+  };
 
   useEffect(() => {
     fetchScoutsStatus()
@@ -231,22 +275,64 @@ export default function AgentsDashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 bg-forge-bg/90 border border-forge-border rounded-xl p-3.5 shrink-0 self-start md:self-auto">
-            <div className="w-9 h-9 rounded-lg bg-forge-amber/10 border border-forge-amber/30 flex items-center justify-center text-forge-amber">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0 self-start md:self-auto">
+            <div className="flex items-center gap-3 bg-forge-bg/90 border border-forge-border rounded-xl p-3.5">
+              <div className="w-9 h-9 rounded-lg bg-forge-amber/10 border border-forge-amber/30 flex items-center justify-center text-forge-amber">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                  Next Swarm Sweep
+                </span>
+                <span className="text-sm font-mono font-bold text-white tracking-wide">
+                  {timeRemaining || "Calculating..."}
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
-                Next Swarm Sweep
-              </span>
-              <span className="text-sm font-mono font-bold text-white tracking-wide">
-                {timeRemaining || "Calculating..."}
-              </span>
-            </div>
+
+            <button
+              onClick={() => handleTriggerSweep()}
+              disabled={Boolean(sweepingPlatform)}
+              className="px-4 py-3 bg-forge-card hover:bg-slate-800 border border-forge-border rounded-xl text-white font-mono text-xs font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-md hover:border-slate-600"
+            >
+              {sweepingPlatform === "all" ? (
+                <>
+                  <div className="animate-spin w-3.5 h-3.5 border-2 border-forge-amber border-t-transparent rounded-full" />
+                  <span>Sweeping Swarm...</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-forge-amber">▶</span>
+                  <span>Sweep All Scouts</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
+
+        {/* Live Sweep Feedback Notification Banner */}
+        {sweepNotification && (
+          <div
+            className={`p-4 rounded-xl border flex items-center justify-between text-xs font-mono transition-all ${
+              sweepNotification.type === "success"
+                ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300"
+                : "bg-red-950/40 border-red-500/40 text-red-300"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span>{sweepNotification.type === "success" ? "✓" : "⚠"}</span>
+              <span>{sweepNotification.message}</span>
+            </div>
+            <button
+              onClick={() => setSweepNotification(null)}
+              className="text-slate-400 hover:text-white ml-3 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* 3 Scout Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -262,6 +348,8 @@ export default function AgentsDashboardPage() {
             scouts.map((scout) => {
               const isHN = scout.name.toLowerCase().includes("hn");
               const isReddit = scout.name.toLowerCase().includes("reddit");
+              const isGitHub = !isHN && !isReddit;
+
               const accentColor = isHN
                 ? "border-amber-500/30 hover:border-amber-500/60 shadow-amber-500/5"
                 : isReddit
@@ -269,20 +357,24 @@ export default function AgentsDashboardPage() {
                 : "border-sky-500/30 hover:border-sky-500/60 shadow-sky-500/5";
 
               const badgeBg = isHN
-                ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
                 : isReddit
-                ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                : "bg-sky-500/10 text-sky-400 border-sky-500/30";
+                ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                : "bg-sky-500/10 text-sky-400 border border-sky-500/30";
+
+              const isSweepingThis =
+                sweepingPlatform === "all" || sweepingPlatform === scout.platform;
 
               return (
                 <div
                   key={scout.agent_id}
                   className={`bg-forge-card border rounded-xl p-5 flex flex-col justify-between transition-all shadow-md hover:shadow-lg ${accentColor}`}
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-4">
+                    {/* Top Identity Bar */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center space-x-2.5">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${badgeBg}`}>
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs ${badgeBg}`}>
                           {isHN ? "HN" : isReddit ? "RD" : "GH"}
                         </div>
                         <div>
@@ -291,50 +383,108 @@ export default function AgentsDashboardPage() {
                         </div>
                       </div>
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         ACTIVE
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {scout.description}
-                    </p>
+                    {/* Protocol and Mission */}
+                    <div className="space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-900 border border-forge-border text-[10px] font-mono text-slate-300">
+                        <span>📡</span>
+                        <span>{scout.ingestion_protocol || "Live Stream API"}</span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {scout.description}
+                      </p>
+                    </div>
 
-                    <div className="space-y-1.5 pt-2 border-t border-forge-border/60 text-[11px] font-mono">
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Source:</span>
-                        <span className="text-slate-200 text-right truncate max-w-[160px]" title={scout.source_description}>
-                          {scout.source_description}
-                        </span>
+                    {/* Monitored Targets Pill Badges */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                        Crawl Targets
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(scout.crawl_targets || []).map((target, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-forge-bg border border-forge-border text-slate-300"
+                          >
+                            {target}
+                          </span>
+                        ))}
                       </div>
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Time Cutoff:</span>
-                        <span className="text-slate-200">≤ {scout.window_hours} hours</span>
+                    </div>
+
+                    {/* Telemetry Metrics Grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-forge-border/60 text-[11px] font-mono">
+                      <div className="p-2 rounded bg-forge-bg/60 border border-forge-border/60">
+                        <span className="text-[10px] uppercase text-slate-400 block">Cutoff</span>
+                        <span className="text-slate-200 font-semibold">≤ {scout.window_hours} hours</span>
                       </div>
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Quality Gate:</span>
+                      <div className="p-2 rounded bg-forge-bg/60 border border-forge-border/60">
+                        <span className="text-[10px] uppercase text-slate-400 block">Quality Gate</span>
                         <span className="text-forge-amber font-semibold">≥ {scout.rubric_threshold} pts</span>
                       </div>
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Schedule:</span>
+                      <div className="p-2 rounded bg-forge-bg/60 border border-forge-border/60">
+                        <span className="text-[10px] uppercase text-slate-400 block">Cadence</span>
                         <span className="text-slate-200">{scout.schedule}</span>
                       </div>
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Latest Sweep:</span>
-                        <span className="text-slate-200" suppressHydrationWarning>
-                          {scout.last_active_at
-                            ? `${new Date(scout.last_active_at).toLocaleDateString()} at ${new Date(scout.last_active_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                            : "Pending next sweep"}
-                        </span>
+                      <div className="p-2 rounded bg-forge-bg/60 border border-forge-border/60">
+                        <span className="text-[10px] uppercase text-slate-400 block">Minted</span>
+                        <span className="text-white font-bold">{scout.blueprints_count} Spec{scout.blueprints_count === 1 ? "" : "s"}</span>
                       </div>
+                    </div>
+
+                    {/* Latest Minted Discovery Card */}
+                    <div className="space-y-1 pt-1">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                        Latest Discovery
+                      </span>
+                      {scout.latest_blueprint ? (
+                        <Link
+                          href={`/blueprints/${scout.latest_blueprint.slug}`}
+                          className="block p-2.5 rounded-lg bg-forge-bg border border-forge-amber/30 hover:border-forge-amber transition-colors group"
+                        >
+                          <div className="flex items-center justify-between text-[10px] font-mono text-forge-amber mb-1">
+                            <span>Minted {formatTimeAgo(scout.latest_blueprint.created_at)}</span>
+                            <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                          </div>
+                          <p className="text-xs text-white font-medium line-clamp-2 group-hover:text-forge-amber transition-colors">
+                            {scout.latest_blueprint.title}
+                          </p>
+                        </Link>
+                      ) : (
+                        <div className="p-2.5 rounded-lg bg-forge-bg/50 border border-forge-border text-[11px] font-mono text-slate-400">
+                          <span className="text-slate-300">Active Stream Monitoring</span>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            Next qualified signal will be synthesized and minted here.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
+                  {/* Action Bar */}
                   <div className="mt-4 pt-3 border-t border-forge-border flex items-center justify-between text-xs font-mono">
-                    <div className="flex items-center gap-1.5 text-slate-300">
-                      <span className="text-sm font-bold text-white">{scout.blueprints_count}</span>
-                      <span className="text-[11px] text-slate-400">Minted to Agora</span>
-                    </div>
+                    <button
+                      onClick={() => handleTriggerSweep(scout.platform)}
+                      disabled={Boolean(sweepingPlatform)}
+                      className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-forge-border text-slate-200 hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50 text-[11px]"
+                    >
+                      {isSweepingThis ? (
+                        <>
+                          <div className="animate-spin w-3 h-3 border-2 border-forge-amber border-t-transparent rounded-full" />
+                          <span>Sweeping...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-forge-amber">▶</span>
+                          <span>Sweep Now</span>
+                        </>
+                      )}
+                    </button>
+
                     <Link
                       href="/"
                       className="text-xs text-forge-amber hover:text-white transition-colors flex items-center gap-1"

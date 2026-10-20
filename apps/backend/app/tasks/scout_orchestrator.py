@@ -88,24 +88,37 @@ class ScoutOrchestrator:
         self.reddit_scout = RedditScout()
         self.github_scout = GitHubScout()
 
-    async def run_scout_cycle(self, window_hours: int = 2) -> dict[str, Any]:
-        """Executes a complete 3-platform crawl, scoring, and publication pass.
+    async def run_scout_cycle(
+        self,
+        window_hours: int = 2,
+        platform: PlatformSource | None = None,
+    ) -> dict[str, Any]:
+        """Executes a platform crawl, scoring, and publication pass.
 
         Args:
             window_hours: Maximum age of content in hours (default 2 hours for 2h cron cycle).
+            platform: Optional specific platform to target (runs all if None).
 
         Returns:
             Execution summary detailing scraped count, qualified count, and created blueprints.
         """
-        logger.info("Starting autonomous scout swarm crawl cycle (window: %dh)...", window_hours)
+        logger.info(
+            "Starting autonomous scout crawl cycle (platform: %s, window: %dh)...",
+            platform.value if platform else "ALL",
+            window_hours,
+        )
         scout_agents = await ensure_scout_agents_exist()
 
         # 1. Ingest Raw Signals across platforms in parallel within the timelapse window
-        hn_task = self.hn_scout.fetch_signals(limit_per_query=5, window_hours=window_hours)
-        reddit_task = self.reddit_scout.fetch_signals(limit_per_sub=10, window_hours=window_hours)
-        gh_task = self.github_scout.fetch_signals(limit_per_query=5, window_hours=window_hours)
+        tasks = []
+        if not platform or platform == PlatformSource.HACKERNEWS:
+            tasks.append(self.hn_scout.fetch_signals(limit_per_query=5, window_hours=window_hours))
+        if not platform or platform == PlatformSource.REDDIT:
+            tasks.append(self.reddit_scout.fetch_signals(limit_per_sub=10, window_hours=window_hours))
+        if not platform or platform == PlatformSource.GITHUB:
+            tasks.append(self.github_scout.fetch_signals(limit_per_query=5, window_hours=window_hours))
 
-        results = await asyncio.gather(hn_task, reddit_task, gh_task, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         raw_signals: list[RawPainSignal] = []
         for r in results:
             if isinstance(r, list):

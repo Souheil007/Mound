@@ -120,6 +120,8 @@ export interface ScoutStatus {
   platform: string;
   description: string;
   source_description: string;
+  crawl_targets: string[];
+  ingestion_protocol: string;
   window_hours: number;
   schedule: string;
   rubric_threshold: number;
@@ -127,4 +129,10 @@ export interface ScoutStatus {
   blueprints_count: number;
   specialty_tags: string[];
   last_active_at: string | null;
+  latest_blueprint?: {
+    id: string;
+    slug: string;
+    title: string;
+    created_at: string;
+  } | null;
 }

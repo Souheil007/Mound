@@ -12,7 +12,7 @@ from app.core.database import get_db_session
 from app.core.rate_limit import RateLimiter
 from app.core.security import generate_agent_api_key, get_current_agent
 from app.models.agent import Agent
-from app.models.blueprint import Blueprint
+from app.models.blueprint import Blueprint, BlueprintVersion
 from app.models.user import User
 from app.schemas.blueprint_api import AgentNotificationsResponse
 from app.services.blueprint_service import BlueprintService
@@ -71,6 +71,13 @@ class AgentProfileResponse(BaseModel):
     daily_amend_quota: int
 
 
+class ScoutLatestBlueprint(BaseModel):
+    id: uuid.UUID
+    slug: str
+    title: str
+    created_at: str
+
+
 class ScoutStatusResponse(BaseModel):
     """Operational telemetry and yield metrics for an autonomous discovery scout."""
 
@@ -79,6 +86,8 @@ class ScoutStatusResponse(BaseModel):
     platform: str
     description: str
     source_description: str
+    crawl_targets: list[str]
+    ingestion_protocol: str
     window_hours: int
     schedule: str
     rubric_threshold: int
@@ -86,6 +95,7 @@ class ScoutStatusResponse(BaseModel):
     blueprints_count: int
     specialty_tags: list[str]
     last_active_at: str | None = None
+    latest_blueprint: ScoutLatestBlueprint | None = None
 
 
 @router.get(
@@ -107,14 +117,20 @@ async def get_scouts_status(
         PlatformSource.HACKERNEWS: {
             "platform": "Hacker News",
             "source_description": "Algolia live date stream (stories & comments)",
+            "crawl_targets": ["Ask HN Discussions", "Show HN Critiques", "Developer Pain Threads"],
+            "ingestion_protocol": "Algolia InstantSearch API (HTTP/2)",
         },
         PlatformSource.REDDIT: {
             "platform": "Reddit",
             "source_description": "r/SaaS, r/devops, r/programming (/new discussions)",
+            "crawl_targets": ["r/SaaS", "r/devops", "r/programming"],
+            "ingestion_protocol": "Atom XML RSS Stream (Paced)",
         },
         PlatformSource.GITHUB: {
             "platform": "GitHub",
             "source_description": "OSS issue backlogs & recent discussion comments",
+            "crawl_targets": ["Top OSS Issue Backlogs", "Workaround Discussions", "Deadlock Bug Reports"],
+            "ingestion_protocol": "GitHub REST v3 API",
         },
     }
 
@@ -122,20 +138,51 @@ async def get_scouts_status(
     for platform, agent in scout_map.items():
         p_meta = meta.get(
             platform,
-            {"platform": platform.value, "source_description": "Public developer discussions"},
+            {
+                "platform": platform.value,
+                "source_description": "Public developer discussions",
+                "crawl_targets": ["Public Discussions"],
+                "ingestion_protocol": "REST API",
+            },
         )
         # Count blueprints authored
         bp_count_stmt = select(func.count(Blueprint.id)).where(Blueprint.creator_agent_id == agent.id)
         bp_count = (await session.execute(bp_count_stmt)).scalar_one() or 0
 
-        # Latest blueprint created_at
-        last_stmt = (
-            select(Blueprint.created_at)
+        # Latest blueprint created
+        last_bp_stmt = (
+            select(
+                Blueprint.id,
+                Blueprint.slug,
+                BlueprintVersion.spec_payload,
+                Blueprint.created_at,
+            )
+            .join(
+                BlueprintVersion,
+                (BlueprintVersion.blueprint_id == Blueprint.id)
+                & (BlueprintVersion.version_num == Blueprint.current_version_num),
+                isouter=True,
+            )
             .where(Blueprint.creator_agent_id == agent.id)
             .order_by(Blueprint.created_at.desc())
             .limit(1)
         )
-        last_created = (await session.execute(last_stmt)).scalar_one_or_none()
+        last_bp_row = (await session.execute(last_bp_stmt)).first()
+        latest_bp = None
+        last_created_iso = None
+        if last_bp_row:
+            last_created_iso = last_bp_row.created_at.isoformat()
+            pitch = (
+                (last_bp_row.spec_payload or {}).get("one_line_pitch", last_bp_row.slug)
+                if last_bp_row.spec_payload
+                else last_bp_row.slug
+            )
+            latest_bp = ScoutLatestBlueprint(
+                id=last_bp_row.id,
+                slug=last_bp_row.slug,
+                title=pitch,
+                created_at=last_created_iso,
+            )
 
         results.append(
             ScoutStatusResponse(
@@ -144,17 +191,61 @@ async def get_scouts_status(
                 platform=p_meta["platform"],
                 description=agent.description or "Autonomous pain scout",
                 source_description=p_meta["source_description"],
+                crawl_targets=p_meta["crawl_targets"],
+                ingestion_protocol=p_meta["ingestion_protocol"],
                 window_hours=2,
                 schedule="Every 2 hours",
                 rubric_threshold=75,
                 status="ACTIVE",
                 blueprints_count=bp_count,
                 specialty_tags=agent.specialty_tags or [],
-                last_active_at=last_created.isoformat() if last_created else None,
+                last_active_at=last_created_iso,
+                latest_blueprint=latest_bp,
             )
         )
 
     return results
+
+
+class ScoutSweepResponse(BaseModel):
+    status: str
+    platform: str
+    signals_scraped: int
+    opportunities_qualified: int
+    blueprints_published: list[dict[str, Any]]
+
+
+@router.post(
+    "/scouts/sweep",
+    response_model=ScoutSweepResponse,
+    summary="Trigger on-demand crawl and synthesis for discovery scouts",
+)
+async def trigger_scout_sweep(
+    platform: str | None = Query(None, description="Optional target platform: 'Reddit', 'Hacker News', or 'GitHub'"),
+) -> ScoutSweepResponse:
+    """Manually triggers an autonomous scout sweep cycle."""
+    from app.tasks.scout_orchestrator import ScoutOrchestrator
+    from app.scouts.models import PlatformSource
+
+    target_source = None
+    if platform:
+        p_lower = platform.lower()
+        if "hn" in p_lower or "hacker" in p_lower:
+            target_source = PlatformSource.HACKERNEWS
+        elif "reddit" in p_lower:
+            target_source = PlatformSource.REDDIT
+        elif "github" in p_lower:
+            target_source = PlatformSource.GITHUB
+
+    orchestrator = ScoutOrchestrator()
+    res = await orchestrator.run_scout_cycle(window_hours=2, platform=target_source)
+    return ScoutSweepResponse(
+        status=res.get("status", "COMPLETED"),
+        platform=target_source.value if target_source else "All Platforms",
+        signals_scraped=res.get("signals_scraped", 0),
+        opportunities_qualified=res.get("opportunities_qualified", 0),
+        blueprints_published=res.get("blueprints_published", []),
+    )
 
 
 @router.post(
