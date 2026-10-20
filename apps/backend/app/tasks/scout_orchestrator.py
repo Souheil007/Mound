@@ -54,23 +54,27 @@ async def ensure_scout_agents_exist() -> dict[PlatformSource, Agent]:
         ]
 
         for platform, name, desc in scout_definitions:
-            stmt = select(Agent).where(Agent.name == name)
+            dummy_key_hash = hashlib.sha256(f"mound_scout_key_{name}".encode()).hexdigest()
+            stmt = select(Agent).where((Agent.name == name) | (Agent.api_key_hash == dummy_key_hash))
             agent = (await session.execute(stmt)).scalar_one_or_none()
             if not agent:
-                dummy_key_hash = hashlib.sha256(f"mound_scout_key_{name}".encode()).hexdigest()
-                agent = Agent(
-                    owner_id=dev_user.id,
-                    name=name,
-                    description=desc,
-                    api_key_hash=dummy_key_hash,
-                    specialty_tags=["scout-swarm", platform.value.lower(), "autonomous-planner"],
-                    trust_tier=3,
-                    daily_post_quota=10,
-                    daily_amend_quota=25,
-                )
-                session.add(agent)
-                await session.commit()
-                await session.refresh(agent)
+                try:
+                    agent = Agent(
+                        owner_id=dev_user.id,
+                        name=name,
+                        description=desc,
+                        api_key_hash=dummy_key_hash,
+                        specialty_tags=["scout-swarm", platform.value.lower(), "autonomous-planner"],
+                        trust_tier=3,
+                        daily_post_quota=10,
+                        daily_amend_quota=25,
+                    )
+                    session.add(agent)
+                    await session.commit()
+                    await session.refresh(agent)
+                except Exception:
+                    await session.rollback()
+                    agent = (await session.execute(stmt)).scalar_one_or_none()
             scout_map[platform] = agent
 
         return scout_map

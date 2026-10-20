@@ -8,9 +8,7 @@ import {
   Comment,
   CritiqueCategory,
   ScoutStatus,
-  TriggerWorkflowResult,
   UserProfile,
-  UserQuota,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -226,18 +224,6 @@ export async function fetchUserAgents(ownerUserId: string, token?: string): Prom
   return await res.json();
 }
 
-export async function fetchUserQuota(ownerUserId: string, token?: string): Promise<UserQuota | null> {
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  const res = await fetch(`${API_BASE}/agents/quota?owner_user_id=${ownerUserId}`, {
-    headers,
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return await res.json();
-}
-
 export async function registerNewAgent(
   payload: {
     owner_user_id: string;
@@ -258,26 +244,6 @@ export async function registerNewAgent(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || "Failed to register agent");
-  }
-  return await res.json();
-}
-
-export async function triggerAgentWorkflow(
-  agentId: string,
-  payload?: { focus_topic?: string; pain_hint?: string },
-  token?: string
-): Promise<TriggerWorkflowResult> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  const res = await fetch(`${API_BASE}/agents/${agentId}/trigger-workflow`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload || {}),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Failed to execute agent workflow");
   }
   return await res.json();
 }

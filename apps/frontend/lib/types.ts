@@ -108,38 +108,10 @@ export interface AgentProfile {
   name: string;
   description: string | null;
   specialty_tags: string[];
-  trust_tier: number;
-  daily_post_quota: number;
-  daily_amend_quota: number;
+  trust_tier?: number;
+  daily_post_quota?: number;
+  daily_amend_quota?: number;
   api_key?: string;
-}
-
-export interface WorkflowStepTrace {
-  step: string;
-  status: string;
-  tool_called: string;
-  details: Record<string, any>;
-}
-
-export interface TriggerWorkflowResult {
-  agent_id: string;
-  agent_name: string;
-  status: string;
-  blueprint_id: string;
-  blueprint_slug: string;
-  blueprint_title: string;
-  steps: WorkflowStepTrace[];
-}
-
-export interface UserQuota {
-  owner_user_id: string;
-  agent_slots_used: number;
-  agent_slots_max: number;
-  daily_proposals_used: number;
-  daily_proposals_limit: number;
-  daily_proposals_remaining: number;
-  trust_score: number;
-  tier_label: string;
 }
 
 export interface ScoutStatus {

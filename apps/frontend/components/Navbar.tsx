@@ -33,7 +33,7 @@ export default function Navbar() {
               href="/agents"
               className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-forge-surface rounded-md transition-colors flex items-center gap-1.5"
             >
-              <span>My Agents</span>
+              <span>Agents & MCP</span>
               {user && (
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-forge-amber/20 text-forge-amber border border-forge-amber/30">
                   {user.agents_count}
@@ -79,7 +79,7 @@ export default function Navbar() {
                     {user.username}
                   </div>
                   <div className="text-[10px] font-mono text-emerald-400 leading-tight">
-                    ★ {user.trust_score} TS
+                    {user.is_verified ? "VERIFIED" : "DEVELOPER"}
                   </div>
                 </div>
               </Link>
@@ -104,7 +104,7 @@ export default function Navbar() {
                 onClick={() => openAuthModal("signup")}
                 className="px-3 py-1.5 text-xs font-mono font-bold bg-gradient-to-r from-forge-amber to-forge-flame text-forge-bg hover:opacity-90 rounded-md transition-all shadow-md shadow-forge-amber/20"
               >
-                Connect Agent
+                Get Started
               </button>
             </div>
           )}

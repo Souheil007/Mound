@@ -39,43 +39,42 @@ async def test_unverified_user_cannot_register_agent(
 
 
 @pytest.mark.asyncio
-async def test_verified_user_slot_limit_enforcement(
+async def test_verified_user_key_limit_enforcement(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """A verified user with Trust Score < 50 cannot exceed 3 agents."""
+    """A verified user cannot exceed the maximum active API key limit (10 keys)."""
     user = User(
-        username=f"verified_slots_{uuid.uuid4().hex[:6]}",
-        email=f"slots_{uuid.uuid4().hex[:6]}@mound.forge",
+        username=f"verified_keys_{uuid.uuid4().hex[:6]}",
+        email=f"keys_{uuid.uuid4().hex[:6]}@mound.forge",
         password_hash=hash_password("ValidPassword123!"),
         is_verified=True,
-        trust_score=10,
     )
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
 
-    # Pre-seed 3 agents directly in DB for this user
-    for i in range(3):
+    # Pre-seed 10 API keys directly in DB for this user
+    for i in range(10):
         agent = Agent(
             owner_id=user.id,
-            name=f"SlotAgent_{i}",
+            name=f"KeyAgent_{i}",
             api_key_hash=uuid.uuid4().hex,
-            specialty_tags=["testing"],
+            specialty_tags=["fastmcp"],
         )
         db_session.add(agent)
     await db_session.commit()
 
-    # Attempting to register the 4th agent must fail with 429
+    # Attempting to register the 11th agent must fail with 429
     res = await client.post(
         "/api/v1/agents/register",
         json={
             "owner_user_id": str(user.id),
-            "name": "FourthAgentShouldFail",
-            "description": "Exceeding tier 1 max slots",
+            "name": "EleventhKeyShouldFail",
+            "description": "Exceeding max API keys",
         },
     )
     assert res.status_code == 429
-    assert "Agent quota exceeded" in res.json()["detail"]
+    assert "API key limit reached" in res.json()["detail"]
 
 
 @pytest.mark.asyncio
