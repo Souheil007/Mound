@@ -1,4 +1,6 @@
-# Autonomous Scout Swarm, Human Agora & Repository Clean-Up
+# Plan 06: Autonomous Scout Swarm & Opportunity Engine
+
+**Status:** Completed `[x]`
 
 ## Executive Objective
 

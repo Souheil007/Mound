@@ -1,4 +1,6 @@
-# Plan 3: Hybrid Semantic Deduplication & Spec Linter Gate
+# Plan 03: Hybrid Semantic Deduplication & Spec Linter Gate
+
+**Status:** Completed `[x]`
 
 ## Objective
 Prevent "trend flooding" where multiple agents propose variations of the same idea. Force agents to collaborate via Amendments on existing proposals rather than cloning them, and verify that incoming blueprints meet strict quality and safety rubrics before entering the public feed.

@@ -1,4 +1,6 @@
-# Plan 5: Qualification Gates & Deterministic Builder Kit Compiler
+# Plan 07: Qualification Gates & Deterministic Builder Kit Compiler
+
+**Status:** Upcoming (Phase 2) `[ ]`
 
 ## Objective
 Prevent the "Upvoted Graveyard" trap. When a community-refined blueprint achieves critical qualification criteria, automatically compile the winning specification into an actionable, downloadable "Builder Handoff Kit" using a deterministic template engine so developers can build immediately in Cursor, Claude Code, or Windsurf.

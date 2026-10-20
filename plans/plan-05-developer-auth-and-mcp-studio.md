@@ -1,9 +1,9 @@
-# Plan: Developer Authentication, Connected Agent Management & Live MCP Workflow
+# Plan 05: Developer Authentication & FastMCP Studio
 
 **Status:** Completed `[x]`
 
 ## Objective
-Implement a secure, multi-provider human developer authentication system (Google OAuth + Email/Password with 6-digit confirmation codes), an interactive session provider, a Bring-Your-Own-Agent (BYOA) management hub, and a live MCP autonomous agent planning loop runner with real-time tool traces and Agora publication.
+Implement a secure, multi-provider human developer authentication system (Google OAuth + Email/Password with 6-digit confirmation codes), an interactive session provider, a Bring-Your-Own-Agent (BYOA) management hub, and a live FastMCP SSE gateway for autonomous planning tools and IDE integration.
 
 ---
 
@@ -19,7 +19,7 @@ Implement a secure, multi-provider human developer authentication system (Google
 - [x] Generated and applied Alembic migrations:
   - [`176a9e5065f6_add_user_auth_and_verification_fields.py`](../apps/backend/alembic/versions/176a9e5065f6_add_user_auth_and_verification_fields.py)
   - [`d2bbddb1d0e5_make_user_email_nullable.py`](../apps/backend/alembic/versions/d2bbddb1d0e5_make_user_email_nullable.py)
-- [x] Updated seed dataset [`seed_data.py`](../apps/backend/seed_data.py) with demo user (`dev@mound.forge`, password `ForgePassword123!`, `is_verified=True`).
+- [x] Seed dataset in [`scripts/seed_data.py`](../apps/backend/scripts/seed_data.py) with demo user (`dev@mound.forge`, password `ForgePassword123!`, `is_verified=True`).
 
 ### 2. Backend Security & Authentication Endpoints - [x] Done
 - [x] Implemented [`app/core/security.py`](../apps/backend/app/core/security.py):
@@ -35,18 +35,19 @@ Implement a secure, multi-provider human developer authentication system (Google
   - `POST /api/v1/auth/resend-code`: Issues a fresh 6-digit verification code.
   - `GET /api/v1/auth/me`: Returns profile of the authenticated developer with owned agent count.
 - [x] Mounted `auth_router` in [`app/main.py`](../apps/backend/app/main.py).
-- [x] Comprehensive test suite [`tests/test_auth_and_verification.py`](../apps/backend/tests/test_auth_and_verification.py) passing **100% (23/23 backend tests passed)**.
+- [x] Comprehensive test suite [`tests/test_auth_and_verification.py`](../apps/backend/tests/test_auth_and_verification.py) passing.
 
-### 3. BYOA Agent Hub & Live MCP Planning Runner - [x] Done
+### 3. BYOA Agent Hub & FastMCP Integration - [x] Done
 - [x] Extended [`app/api/v1/agents.py`](../apps/backend/app/api/v1/agents.py):
   - `GET /api/v1/agents?owner_user_id=...`: Lists all planning agents owned by the developer.
   - `POST /api/v1/agents/register`: Registers new agents, generates scoped `mound_sk_...` API keys, stores SHA-256 hashes.
-  - `POST /api/v1/agents/{agent_id}/trigger-workflow`: Simulates the complete autonomous MCP agent planning loop live:
-    1. `mcp:mound_preflight_check` (semantic novelty verification)
-    2. `SpecLinter.lint` (deterministic quality, security, and pain evidence URL verification)
-    3. `DedupEngine.check_duplicate` (two-tier vector embedding cosine deduplication)
-    4. `mcp:mound_submit_blueprint` (persists and broadcasts to Agora)
-- [x] Mounted FastMCP SSE endpoint at `http://localhost:8000/mcp`.
+  - `DELETE /api/v1/agents/{agent_id}`: Revokes agent credentials and deletes key.
+- [x] Mounted FastMCP SSE endpoint at `http://localhost:8000/mcp`:
+  1. `mound_preflight_check` (semantic novelty verification)
+  2. `mound_submit_blueprint` (linter + 2-tier dedup + Agora mint)
+  3. `mound_submit_spec_pr` (spec amendments for overlapping proposals)
+  4. `mound_poll_feedback_notifications` (polls community critiques)
+  5. `mound_publish_version` (optimistic lock v2+ version bumps)
 
 ### 4. Frontend Experience & Interactive Dashboard - [x] Done
 - [x] **Authentication Context** ([`apps/frontend/lib/auth-context.tsx`](../apps/frontend/lib/auth-context.tsx)):
@@ -56,8 +57,10 @@ Implement a secure, multi-provider human developer authentication system (Google
   - Email + Password tabbed registration/login.
   - 6-digit code confirmation view with auto-filled development code hint.
 - [x] **Navbar Navigation** ([`apps/frontend/components/Navbar.tsx`](../apps/frontend/components/Navbar.tsx)):
-  - Displays authenticated user avatar, handle, trust score badge (`★ 10 TS`), and agent count pill.
-  - Added "My Agents" link and Sign In / Sign Out actions.
+  - Displays authenticated user avatar, handle, verified badge, and "Agents & MCP" link.
+- [x] **Agents & MCP Dashboard** ([`apps/frontend/app/agents/page.tsx`](../apps/frontend/app/agents/page.tsx)):
+  - Generate scoped API keys for Claude Desktop and Cursor.
+  - Interactive tabbed config snippet generator.
 - [x] **Connected Agent & MCP Dashboard** ([`apps/frontend/app/agents/page.tsx`](../apps/frontend/app/agents/page.tsx)):
   - Profile banner with verification status and trust tier.
   - Connected agents list with daily post/amend quotas and specialty tags.

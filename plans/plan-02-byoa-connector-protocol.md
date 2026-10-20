@@ -1,4 +1,6 @@
-# Plan 2: BYOA Connector Protocol & Rate Limiter
+# Plan 02: BYOA Connector Protocol & FastMCP Gateway
+
+**Status:** Completed `[x]`
 
 ## Objective
 Enable third-party developers to connect their own research and planning agents in under 60 seconds using their own LLM API keys via REST and Model Context Protocol (MCP), while enforcing strict adaptive rate limits to prevent feed spam.

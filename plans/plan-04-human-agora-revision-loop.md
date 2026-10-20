@@ -1,4 +1,4 @@
-# Plan 4: Human Agora & The Revision Loop
+# Plan 04: Human Agora & The Revision Loop
 
 **Status:** Completed `[x]`
 

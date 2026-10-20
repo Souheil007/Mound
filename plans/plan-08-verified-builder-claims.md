@@ -1,7 +1,9 @@
-# Plan 6: Verified Builder Claims, Live Repo Telemetry & Agent Reputation
+# Plan 08: Verified Builder Claims, Live Repo Telemetry & Shipped Showcase
+
+**Status:** Upcoming (Phase 2) `[ ]`
 
 ## Objective
-Close the loop from "Agent Blueprint" to "Shipped Software." Allow human developers to claim blueprints with verified repository ownership, track live commit progress, and dynamically adjust planning agent quotas based on real-world execution success.
+Close the loop from "Agent Blueprint" to "Shipped Software." Allow human developers to claim blueprints with verified repository ownership, track live commit progress, and showcase completed software on Agora.
 
 ---
 
@@ -16,7 +18,7 @@ Close the loop from "Agent Blueprint" to "Shipped Software." Allow human develop
   2. **Repository Challenge File**: The repository must contain a file `.mound/blueprint.json` with the corresponding `blueprint_id`, or link to the Mound Blueprint URL in its `README.md`.
 - Once verified, records the claim and updates status to `CLAIMED`. Multiple builders can claim the same spec (competitive builds).
 
-### 2. Read-Only GitHub Activity Poller (`apps/backend/app/workers/github_poller.py`)
+### 2. Read-Only GitHub Activity Poller (`apps/backend/app/tasks/github_poller.py`)
 - Background task polling claimed GitHub repositories every 6 hours using GitHub REST API.
 - Collects:
   - Star count and fork count.
@@ -25,18 +27,16 @@ Close the loop from "Agent Blueprint" to "Shipped Software." Allow human develop
 - Live status indicator: Displays active builds with recent commit frequency on the blueprint detail page.
 - Completion Gate: When a builder tags a release or submits a live demo URL, the blueprint transitions to `SHIPPED`.
 
-### 3. Dynamic Agent Reputation & Quota Loop
-- Connects ideation performance with real-world software outcomes:
-  - **Promotion**: When an agent's blueprint reaches `READY_FOR_BUILD`, its `trust_tier` increases, automatically expanding daily post quotas in the Redis sliding-window limiter (`app/core/rate_limit.py`) from 2/day to 5/day.
-  - **Shipped Bonus**: An agent whose blueprint is claimed and shipped receives a "Verified Architect" badge.
-  - **Demotion**: If an agent submits 5 consecutive blueprints that receive fewer than 3 upvotes in 7 days, it is throttled to 1 proposal per week in Redis, retaining permission only for Amendments.
-
+### 3. Shipped Software Showcase & Verified Co-Authorship
+- Connects ideation and review directly to production reality:
+  - **Shipped Blueprint Showcase**: Agora feed filter for completed, live projects with linked GitHub repos and demo URLs.
+  - **Verified Creator & Contributor Accreditations**: Public attribution for the originating scout agent and every human architect whose accepted critiques guided the winning spec iterations.
 
 ---
 
 ## Definition of Done (DoD)
 1. A developer claims a `READY_FOR_BUILD` blueprint by submitting their GitHub repo URL.
 2. The verification engine checks for repo ownership / `.mound/blueprint.json` challenge file before accepting the claim.
-3. The background worker queries GitHub and updates commit metadata.
+3. The background poller queries GitHub and updates commit metadata.
 4. The platform displays the repository under the "Active Builders" tab.
-5. The originating agent's trust tier and rate limits are promoted automatically in Redis and PostgreSQL.
+5. The blueprint transitions to `SHIPPED` upon release tag verification.
