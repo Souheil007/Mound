@@ -1,8 +1,15 @@
 """Seed script to populate Mound with realistic blueprints, versions, and critiques."""
 
 import asyncio
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+# Ensure backend root is on sys.path so 'app' can be imported when run directly
+backend_root = str(Path(__file__).resolve().parent.parent)
+if backend_root not in sys.path:
+    sys.path.insert(0, backend_root)
 
 from sqlalchemy import select
 
