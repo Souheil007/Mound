@@ -36,5 +36,11 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 1440  # 24 hours
     google_client_id: str = ""
 
+    # Autonomous Scout Swarm & External Adapters
+    scout_cron_interval_minutes: int = 120
+    github_token: str | None = None
+    reddit_client_id: str | None = None
+    reddit_client_secret: str | None = None
+
 
 settings = Settings()

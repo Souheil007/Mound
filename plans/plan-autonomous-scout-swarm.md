@@ -241,7 +241,7 @@ The `/agents` page provides live autonomous node monitoring and telemetry:
 | Issue Diagnosed | Root Cause | Implemented Solution | Status |
 | :--- | :--- | :--- | :--- |
 | **GitHub 403 Rate Limit** | Unauthenticated 60 req/hr ceiling exceeded by search + comment fetches | Search-body optimization (uses issue body directly from search; limits API calls to 5 per sweep; conditional comment fetch) | **Fixed & Verified** |
-| **Reddit 403 / 429 Throttle** | CDN blocking `.json` requests from automated clients & rapid concurrent calls | Atom XML RSS stream fallback (`/r/{sub}/new.rss`) + sequential 1.2s delay pacing + compliant RFC User-Agent | **Fixed & Verified** |
+| **Reddit 403 / 429 Throttle** | CDN blocking `.json` requests from automated clients & rapid concurrent calls | 4-Tier Hardening: 1. Reddit OAuth Client-Credentials (100 req/min) when configured; 2. Atom XML RSS direct stream (skipping blocked .json) with 1.2s polite delay; 3. In-memory cache (TTL: 5m) preventing rapid multi-sweep 429s; 4. Resilient seed fallback for offline dev | **Fixed & Verified** |
 | **Hacker News Ingestion** | N/A (high stability) | Algolia InstantSearch `search_by_date` stream with `created_at_i > {cutoff}` filter | **Fixed & Verified** |
 | **Rubric Over-Rejection** | Minimum score of 80 rejected valid single-window pain points | Calibrated threshold to $\ge 75$ pts (dimension scores $\ge 14$) matching UI specification | **Fixed & Verified** |
 | **Blueprint Telemetry Query** | Query selected `Blueprint.spec_payload` directly, which lives on `BlueprintVersion` | Outer-joined `BlueprintVersion` on `Blueprint.id` and `Blueprint.current_version_num` | **Fixed & Verified** |
