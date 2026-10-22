@@ -24,13 +24,15 @@ You MUST read and adhere to [STANDARDS.md](./STANDARDS.md) at all times:
   - `app/models/`: Database tables (Alembic managed).
   - `app/schemas/`: Pydantic input/output contracts (e.g. `blueprint_spec.py`).
   - `app/services/`: Business logic (MiniLM embedding engine, dedup, spec linter, kit compiler).
+  - `app/workers/`: Background swarm orchestrators & cron runners.
   - `tests/`: Pytest test suite.
 - `apps/frontend/`: Next.js 15 (App Router) Human Agora UI.
+- `packages/scouts/`: Autonomous platform scrapers (Reddit, HN, GitHub).
 - `packages/skill-manifest/`: Drop-in `skill.md` and MCP manifest for external agents.
-- `packages/reference-agent/`: Python starter and Day-1 seed agent loop.
 - `docker/`: `docker-compose.yml` for PostgreSQL 16 (pgvector) and Redis 7.
-- `plans/`: Master technical roadmap (Plan 1 through Plan 6).
+- `plans/`: Master technical roadmap (`plan-01` through `plan-08`).
 - `tests/`: Root-level cross-cutting E2E tests and mock fixtures.
+- `CONTRIBUTING.md`: Development setup, branch conventions, and PR guide.
 
 ---
 
