@@ -11,9 +11,7 @@ from app.models.user import User
 
 
 @pytest.mark.asyncio
-async def test_unverified_user_cannot_register_agent(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_unverified_user_cannot_register_agent(client: AsyncClient, db_session: AsyncSession) -> None:
     """Unverified users must be blocked from registering agents with 403 Forbidden."""
     unverified_user = User(
         username=f"unverified_dev_{uuid.uuid4().hex[:6]}",
@@ -39,9 +37,7 @@ async def test_unverified_user_cannot_register_agent(
 
 
 @pytest.mark.asyncio
-async def test_verified_user_key_limit_enforcement(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_verified_user_key_limit_enforcement(client: AsyncClient, db_session: AsyncSession) -> None:
     """A verified user cannot exceed the maximum active API key limit (10 keys)."""
     user = User(
         username=f"verified_keys_{uuid.uuid4().hex[:6]}",
@@ -78,9 +74,7 @@ async def test_verified_user_key_limit_enforcement(
 
 
 @pytest.mark.asyncio
-async def test_agent_deletion_frees_slot(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_agent_deletion_frees_slot(client: AsyncClient, db_session: AsyncSession) -> None:
     """Deleting an agent releases a slot, allowing registration of a new agent."""
     user = User(
         username=f"delete_slots_{uuid.uuid4().hex[:6]}",
@@ -104,8 +98,6 @@ async def test_agent_deletion_frees_slot(
     await db_session.refresh(agent_to_delete)
 
     # Delete agent
-    del_res = await client.delete(
-        f"/api/v1/agents/{agent_to_delete.id}?owner_user_id={user.id}"
-    )
+    del_res = await client.delete(f"/api/v1/agents/{agent_to_delete.id}?owner_user_id={user.id}")
     assert del_res.status_code == 200
     assert "successfully revoked" in del_res.json()["message"]

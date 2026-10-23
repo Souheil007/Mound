@@ -21,11 +21,16 @@ logger = logging.getLogger(__name__)
 
 # Reference archetype embeddings for local semantic evaluation (when external LLM keys are absent)
 ARCHETYPE_PROMPTS = [
+    # Enterprise Infrastructure & Reliability
     "Autonomous AI agent governance, tool calling harness, prompt drift detection, context window management, and Model Context Protocol servers",
     "High-availability distributed database proxy, connection pool multiplexer, adaptive backpressure coordinator, and failover circuit breaker",
-    "High-leverage standalone developer productivity tool, CLI utility, SDK generator, API gateway proxy, and workflow orchestration engine",
     "Automated zero-day CVE vulnerability scanner, exploit surface auditor for agencies, and continuous infrastructure compliance monitor",
     "SaaS external dependency sentinel, cloud quota and billing alert governor, and synthetic golden-path health check agent",
+    # Developer Productivity, Build Tools & Micro-SaaS
+    "High-leverage standalone developer productivity tool, CLI utility, SDK generator, API gateway proxy, and workflow orchestration engine",
+    "Developer workflow automation, schema migration validator, webhook reliability proxy, and third-party API contract tester",
+    "Lightweight developer micro-SaaS, error monitoring sentinel, database backup verification engine, and background job dashboard",
+    "Cross-platform developer tooling, local environment orchestrator, git workflow assistant, and automated release manager",
 ]
 
 
@@ -137,14 +142,23 @@ class LLMEvaluator:
             wtp = min(25, wtp + 2)
 
         total = tam + urgency + wtp + feasibility
-        is_viable = total >= 80 and tam >= 12 and urgency >= 12 and wtp >= 12 and feasibility >= 12
+        is_viable = total >= 70 and tam >= 12 and urgency >= 12 and wtp >= 12 and feasibility >= 12
 
         clean_title = re.sub(r"[^\w\s-]", "", signal.title).strip()
         if len(clean_title) > 75:
             clean_title = clean_title[:72] + "..."
 
+        project_name = "".join(w.capitalize() for w in clean_title.split()[:3]) if is_viable else None
+        project_type = "Developer Tool / Automation" if is_viable else None
+        mvp_scope = (
+            f"Modular MVP resolving core friction in {clean_title} with CLI/API integration." if is_viable else None
+        )
         pitch = f"Autonomous developer platform addressing {clean_title}" if is_viable else None
-        rejection = None if is_viable else f"Semantic affinity ({max_affinity:.2f}) indicates insufficient standalone project leverage."
+        rejection = (
+            None
+            if is_viable
+            else f"Semantic affinity ({max_affinity:.2f}) indicates insufficient standalone project leverage."
+        )
 
         return OpportunityEvaluation(
             signal_id=signal.id,
@@ -154,6 +168,9 @@ class LLMEvaluator:
             willingness_to_pay_score=wtp,
             feasibility_score=feasibility,
             total_score=total,
+            proposed_project_name=project_name,
+            project_type=project_type,
+            mvp_scope=mvp_scope,
             rationale=f"Tier-2 Dense Semantic Scoring: max archetype affinity {max_affinity:.2f}. Total score: {total}/100. Viable: {is_viable}.",
             suggested_pitch=pitch,
             rejection_reason=rejection,
@@ -176,7 +193,7 @@ class LLMEvaluator:
 
             data = resp.json()
             text_resp = data["candidates"][0]["content"]["parts"][0]["text"]
-            res_dict = json.loads(text_resp)
+            res_dict = cls._extract_and_parse_json(text_resp)
             return cls._parse_llm_dict(signal, res_dict, "Gemini-1.5-Flash")
 
     @classmethod
@@ -188,7 +205,10 @@ class LLMEvaluator:
         payload = {
             "model": "gpt-4o-mini",
             "messages": [
-                {"role": "system", "content": "You are an elite YC/DevTool Product Architect. Always reply in valid JSON."},
+                {
+                    "role": "system",
+                    "content": "You are an elite YC/DevTool Product Architect. Always reply in valid JSON.",
+                },
                 {"role": "user", "content": prompt},
             ],
             "response_format": {"type": "json_object"},
@@ -200,7 +220,8 @@ class LLMEvaluator:
                 raise RuntimeError(f"OpenAI API returned HTTP {resp.status_code}: {resp.text}")
 
             data = resp.json()
-            res_dict = json.loads(data["choices"][0]["message"]["content"])
+            raw_text = data["choices"][0]["message"]["content"]
+            res_dict = cls._extract_and_parse_json(raw_text)
             return cls._parse_llm_dict(signal, res_dict, "GPT-4o-Mini")
 
     @classmethod
@@ -226,8 +247,7 @@ class LLMEvaluator:
 
             data = resp.json()
             raw_text = data["content"][0]["text"]
-            match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-            res_dict = json.loads(match.group(0)) if match else json.loads(raw_text)
+            res_dict = cls._extract_and_parse_json(raw_text)
             return cls._parse_llm_dict(signal, res_dict, "Claude-3.5-Haiku")
 
     @classmethod
@@ -253,70 +273,196 @@ class LLMEvaluator:
             "response_format": {"type": "json_object"},
         }
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code == 429:
+                await asyncio.sleep(2.0)
+                resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code != 200:
                 raise RuntimeError(f"Mistral API returned HTTP {resp.status_code}: {resp.text}")
 
             data = resp.json()
             raw_text = data["choices"][0]["message"]["content"]
-            match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-            res_dict = json.loads(match.group(0)) if match else json.loads(raw_text)
+            res_dict = cls._extract_and_parse_json(raw_text)
             return cls._parse_llm_dict(signal, res_dict, f"Mistral ({model_name})")
 
     @classmethod
+    def _extract_and_parse_json(cls, raw_text: str) -> dict[str, Any]:
+        """Robustly extracts and parses JSON from LLM output, handling markdown fences,
+        trailing commas, unescaped characters, and falling back to regex key extraction if needed."""
+        if not raw_text:
+            raise ValueError("Empty LLM response text")
+
+        text = raw_text.strip()
+
+        # 1. Strip markdown fences if present
+        if "```" in text:
+            text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+            text = re.sub(r"```\s*$", "", text, flags=re.MULTILINE)
+            text = text.strip()
+
+        # 2. Extract outermost JSON object candidate
+        json_match = re.search(r"\{.*\}", text, re.DOTALL)
+        candidate = json_match.group(0) if json_match else text
+
+        # Attempt 1: Standard JSON parse
+        try:
+            return json.loads(candidate)
+        except Exception:
+            pass
+
+        # Attempt 2: Clean trailing commas before closing braces/brackets
+        cleaned = re.sub(r",\s*([\]}])", r"\1", candidate)
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            pass
+
+        # Attempt 3: Replace unescaped newlines inside strings
+        def _fix_newlines(match_obj):
+            s = match_obj.group(0)
+            return s.replace("\n", "\\n").replace("\r", "")
+
+        cleaned_newlines = re.sub(r'"([^"\\]*(\\.[^"\\]*)*)"', _fix_newlines, cleaned)
+        try:
+            return json.loads(cleaned_newlines)
+        except Exception:
+            pass
+
+        # Attempt 4: Deterministic Regex-based Key Extraction fallback
+        logger.info("LLMEvaluator: Attempting regex key extraction fallback for LLM response.")
+        extracted: dict[str, Any] = {}
+
+        viable_match = re.search(r'"is_viable_project"\s*:\s*(true|false)', text, re.IGNORECASE)
+        if viable_match:
+            extracted["is_viable_project"] = viable_match.group(1).lower() == "true"
+
+        for score_key in ["tam_score", "urgency_score", "willingness_to_pay_score", "feasibility_score"]:
+            sm = re.search(rf'"{score_key}"\s*:\s*(\d+)', text)
+            if sm:
+                extracted[score_key] = int(sm.group(1))
+
+        for str_key in [
+            "proposed_project_name",
+            "project_type",
+            "suggested_pitch",
+            "mvp_scope",
+            "rationale",
+            "rejection_reason",
+        ]:
+            stm = re.search(rf'"{str_key}"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+            if stm:
+                try:
+                    extracted[str_key] = stm.group(1).encode("utf-8").decode("unicode_escape", errors="replace")
+                except Exception:
+                    extracted[str_key] = stm.group(1)
+
+        if extracted.get("tam_score") is not None or extracted.get("is_viable_project") is not None:
+            return extracted
+
+        raise ValueError(f"Could not parse valid JSON or extract keys from LLM response: {raw_text[:200]}")
+
+    @classmethod
     def _build_prompt(cls, signal: RawPainSignal) -> str:
-        return f"""You are an elite Y-Combinator Venture Architect and Principal Developer Tooling Engineer.
-Evaluate this community pain signal to determine if it represents an INNOVATIVE, STANDALONE SOFTWARE PROJECT (devtool, AI agent harness, micro-SaaS, or CLI).
+        return f"""You are a Principal Product Architect and Venture Scout specializing in developer tools, micro-SaaS, and software utilities.
 
-Do NOT accept single-repo bug reports, syntax errors, or localized repository maintenance chores.
-Look for:
-1. Novelty & Modern Tech Leverage (autonomous agents, MCP, RAG, devtools, privacy-first, workflow automation).
-2. Standalone Solvability (Can an engineer build this as an independent tool/SaaS?).
-3. Commercial & Developer Demand (Would people pay or star this?).
+Analyze this community signal to identify if it represents a VALUABLE, STANDALONE SOFTWARE PROJECT that a small team or solo developer can build, launch, and monetize.
 
+=== SIGNAL DETAILS ===
+Source: {signal.platform.value}
 Title: {signal.title}
-Platform: {signal.platform.value}
-Content:
-{signal.content[:4000]}
+Post Content:
+{signal.content[:3500]}
 
-Reply strictly with a JSON object with these exact keys:
+=== SPECIAL GUIDANCE FOR "SHOW & TELL" / PROTOTYPE POSTS ===
+Many signals come from builder communities (e.g. r/SideProject, r/microSaaS, Show HN, r/selfhosted) where developers post: "I built X", "Show HN: X", or showcase a working prototype or proof-of-concept.
+For these posts:
+1. RECOGNIZE THE UNDERLYING WORKFLOW FRICTION & MARKET GAP:
+   Do NOT judge whether this specific author's hobby prototype has polished marketing or enterprise sales. Instead, evaluate the CORE SOFTWARE UTILITY OR WORKFLOW GAP it addresses.
+   Ask: Is this prototype proving that a painful workflow (e.g. controlling devices via AI agents, validating document citations, masking credentials during screen sharing, git-native task tracking) can be automated?
+2. STANDALONE PRODUCT VIABILITY:
+   Could this concept (or a polished, production-grade, multi-tenant version of it) be built and monetized by a developer? (e.g., as an MCP server, CLI, desktop utility, browser extension, or micro-SaaS).
+3. DO NOT DOWNVOTE INNOVATIVE PROTOTYPES AS "HOBBY":
+   If a prototype solves a painful real-world workflow or unlocks a new agentic/developer paradigm, award high TAM (14-22), Urgency (14-20), and Feasibility (16-24).
+
+=== EVALUATION CRITERIA ===
+1. PROBLEM VALIDITY: Is this a genuine, recurring friction, developer productivity gap, or industry workflow need? (Reject localized single-repo bugs, syntax issues, homework, or trivial config).
+2. BUILDABILITY: Can 1-2 engineers build a functional MVP within 2-4 weeks? (Prefer high-leverage tools, CLIs, micro-SaaS, API proxies, MCP servers, or workflow extensions over impossible multi-year capital-intensive megaprojects).
+3. COMMERCIAL OR DEVELOPER DEMAND: Would developers or companies pay recurring fees ($15-$500/mo) or enthusiastically adopt/star this?
+4. INCUMBENT CHECK: Is there room for a focused, superior standalone product, or is this already trivialized by standard native features?
+
+=== CALIBRATED SCORING RUBRIC (0-25 each, Total 0-100) ===
+- tam_score (Market Magnitude):
+    0-8: Niche hobbyist curiosity or single-user quirk.
+    9-16: Solid micro-SaaS / focused developer niche ($1M - $20M addressable market).
+    17-25: Broad horizontal standard across modern software engineering or enterprise teams.
+- urgency_score (Pain Severity):
+    0-8: Mild inconvenience; easily worked around with a quick script.
+    9-16: Recurring productivity drag, frequent context switching, or operational frustration.
+    17-25: Production downtime, revenue loss, data risk, or severe compliance breach.
+- willingness_to_pay_score (Commercial Viability):
+    0-8: Expected to be free; strong user pushback against payment.
+    9-16: High probability of $10-$99/mo developer/team subscription or rapid open-source adoption.
+    17-25: Proven budget with willingness for $200-$2,000/mo team or enterprise tier.
+- feasibility_score (Buildability & MVP Scope):
+    0-8: Impractical (requires deep OS kernel changes, massive partnerships, or billions in capital).
+    9-16: Moderate buildability (requires resilient background workers, reverse-engineering, or multi-protocol bridges).
+    17-25: High buildability (a clean, elegant MVP can be built and deployed in 2-4 weeks).
+
+Reply strictly with a valid JSON object matching these exact keys:
 {{
   "is_viable_project": bool,
+  "proposed_project_name": "Short, catchy working project name (or null if rejected)",
+  "project_type": "CLI | Micro-SaaS | Browser/VSCode Extension | API Bridge | Developer Library | MCP Server (or null)",
   "tam_score": int, (0-25)
   "urgency_score": int, (0-25)
   "willingness_to_pay_score": int, (0-25)
   "feasibility_score": int, (0-25)
-  "suggested_pitch": string or null,
-  "rationale": string,
+  "suggested_pitch": "One compelling sentence describing what to build and for whom (or null)",
+  "mvp_scope": "2-3 sentence description of the minimum viable product (or null)",
+  "rationale": "Strategic explanation of the evaluation and scores",
   "rejection_reason": string or null
 }}"""
 
     @classmethod
     def _parse_llm_dict(cls, signal: RawPainSignal, data: dict[str, Any], engine_name: str) -> OpportunityEvaluation:
+        def _clean_str(val: Any) -> str | None:
+            if val is None:
+                return None
+            if isinstance(val, dict):
+                return " ".join(str(v) for v in val.values()).strip() or None
+            if isinstance(val, list):
+                return " ".join(str(v) for v in val).strip() or None
+            s = str(val).strip()
+            return s if s else None
+
         tam = max(0, min(25, int(data.get("tam_score", 10))))
         urgency = max(0, min(25, int(data.get("urgency_score", 10))))
         wtp = max(0, min(25, int(data.get("willingness_to_pay_score", 10))))
         feasibility = max(0, min(25, int(data.get("feasibility_score", 10))))
         total = tam + urgency + wtp + feasibility
 
-        is_viable = bool(data.get("is_viable_project", total >= 80))
+        explicit_viable = data.get("is_viable_project")
+        if explicit_viable is not None:
+            is_viable = (
+                bool(explicit_viable)
+                and total >= 70
+                and tam >= 10
+                and urgency >= 10
+                and wtp >= 10
+                and feasibility >= 10
+            )
+        else:
+            is_viable = total >= 70 and tam >= 12 and urgency >= 12 and wtp >= 12 and feasibility >= 12
 
-        pitch = data.get("suggested_pitch")
-        if isinstance(pitch, dict):
-            pitch = " ".join(str(v) for v in pitch.values())
-        elif isinstance(pitch, list):
-            pitch = " ".join(str(v) for v in pitch)
-        elif pitch is not None:
-            pitch = str(pitch)
+        project_name = _clean_str(data.get("proposed_project_name"))
+        project_type = _clean_str(data.get("project_type"))
+        mvp_scope = _clean_str(data.get("mvp_scope"))
+        pitch = _clean_str(data.get("suggested_pitch"))
+        rejection = _clean_str(data.get("rejection_reason"))
 
-        rejection = data.get("rejection_reason")
-        if isinstance(rejection, dict):
-            rejection = " ".join(str(v) for v in rejection.values())
-        elif isinstance(rejection, list):
-            rejection = " ".join(str(v) for v in rejection)
-        elif rejection is not None:
-            rejection = str(rejection)
+        if not is_viable and not rejection:
+            rejection = f"Total score ({total}/100) or dimension balance below qualification threshold."
 
         raw_rationale = data.get("rationale", "Evaluated via LLM reasoning.")
         if isinstance(raw_rationale, (dict, list)):
@@ -331,6 +477,9 @@ Reply strictly with a JSON object with these exact keys:
             willingness_to_pay_score=wtp,
             feasibility_score=feasibility,
             total_score=total,
+            proposed_project_name=project_name,
+            project_type=project_type,
+            mvp_scope=mvp_scope,
             rationale=rationale,
             suggested_pitch=pitch,
             rejection_reason=rejection,

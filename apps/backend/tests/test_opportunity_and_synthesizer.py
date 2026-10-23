@@ -1,10 +1,17 @@
 """Tests verifying the strict Billion-Dollar Opportunity Rubric and Dynamic Domain Synthesizer."""
 
 import pytest
+
 from app.scouts.models import PlatformSource, RawPainSignal
 from app.services.opportunity_evaluator import OpportunityEvaluator
 from app.services.scout_synthesizer import ScoutSynthesizer
 from app.services.spec_linter import SpecLinter
+
+
+@pytest.fixture(autouse=True)
+def clean_db():
+    """Bypasses database cleanup for pure opportunity and synthesizer unit tests."""
+    yield
 
 
 def test_rejects_cypress_iframe_issue():
@@ -96,7 +103,9 @@ def test_qualifies_enterprise_finops_agony():
     assert len(spec.problem_statement) <= 600
 
     # Verify deliverables are specifically FinOps/compute oriented, not generic
-    assert any("ebpf" in d.lower() or "compute" in d.lower() or "rightsizing" in d.lower() for d in spec.mvp_deliverables)
+    assert any(
+        "ebpf" in d.lower() or "compute" in d.lower() or "rightsizing" in d.lower() for d in spec.mvp_deliverables
+    )
     # Verify acceptance criteria have concrete percentages / latencies
     assert any("30%" in a or "latency" in a for a in spec.acceptance_criteria)
 
@@ -158,10 +167,12 @@ async def test_synthesized_spec_passes_strict_linter():
 @pytest.mark.asyncio
 async def test_mistral_llm_evaluator_with_open_mistral_7b(monkeypatch):
     """Verifies Mistral LLM evaluation with model open-mistral-7b."""
-    from unittest.mock import AsyncMock, MagicMock
-    from app.services.llm_evaluator import LLMEvaluator
-    from app.core.config import settings
+    from unittest.mock import MagicMock
+
     import httpx
+
+    from app.core.config import settings
+    from app.services.llm_evaluator import LLMEvaluator
 
     signal = RawPainSignal(
         id="mistral_test_signal",
@@ -213,3 +224,206 @@ async def test_mistral_llm_evaluator_with_open_mistral_7b(monkeypatch):
     assert "Mistral" in eval_result.rationale
     assert eval_result.suggested_pitch == "Sandboxed runtime for autonomous AI agents"
 
+
+def test_tier1_disqualification_records_matched_pattern():
+    signal = RawPainSignal(
+        id="syntax_err_1",
+        platform=PlatformSource.GITHUB,
+        title="SyntaxError: Unexpected identifier in index.js",
+        content="Getting a syntaxerror when running node index.js with modern imports.",
+        author="novice_dev",
+        url="https://github.com/org/repo/issues/1",
+        engagement_count=2,
+    )
+    evaluation = OpportunityEvaluator.evaluate(signal)
+    assert not evaluation.is_structural_problem
+    assert "matched: 'syntaxerror'" in evaluation.rejection_reason
+
+
+def test_permission_denied_in_architectural_context_not_disqualified():
+    signal = RawPainSignal(
+        id="iam_access_broker",
+        platform=PlatformSource.REDDIT,
+        title="Managing IAM permissions and temporary access across our multi-account setup is painful",
+        content=(
+            "Our DevOps team is constantly granting just-in-time access for engineers across 30 AWS accounts. "
+            "Engineers frequently get blocked when access tokens expire. We need an automated access gateway "
+            "with Slack approvals and automated audit logging."
+        ),
+        author="lead_devops",
+        url="https://reddit.com/r/devops/comments/iam123",
+        engagement_count=90,
+    )
+    disqualification = OpportunityEvaluator.check_tier1_disqualification(signal)
+    assert disqualification is None
+
+
+@pytest.mark.asyncio
+async def test_llm_evaluator_parses_buildability_fields(monkeypatch):
+    """Verifies that the LLM evaluator correctly parses project_type and mvp_scope."""
+    from unittest.mock import MagicMock
+
+    import httpx
+
+    from app.core.config import settings
+    from app.services.llm_evaluator import LLMEvaluator
+
+    signal = RawPainSignal(
+        id="webhook_pulse_test",
+        platform=PlatformSource.HACKERNEWS,
+        title="Webhooks are an operational nightmare: silent failures and missing retries",
+        content="Third-party webhooks fail silently without replay capabilities or dead letter queues.",
+        author="api_builder",
+        url="https://news.ycombinator.com/item?id=887766",
+        engagement_count=65,
+    )
+
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": (
+                        '{"is_viable_project": true, '
+                        '"proposed_project_name": "WebhookPulse", '
+                        '"project_type": "Micro-SaaS / API Bridge", '
+                        '"tam_score": 18, "urgency_score": 19, '
+                        '"willingness_to_pay_score": 18, "feasibility_score": 20, '
+                        '"suggested_pitch": "Reliable webhook ingress proxy with automated retry queues.", '
+                        '"mvp_scope": "Lightweight proxy capturing inbound webhooks with Redis queues and UI dead-letter replay.", '
+                        '"rationale": "High-urgency API infrastructure problem that can be shipped by a solo builder in 3 weeks.", '
+                        '"rejection_reason": null}'
+                    )
+                }
+            }
+        ]
+    }
+
+    async def mock_post(self, url, **kwargs):
+        return mock_response
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
+    monkeypatch.setattr(settings, "llm_provider", "mistral")
+    monkeypatch.setattr(settings, "mistral_api_key", "mock_key")
+
+    eval_result = await LLMEvaluator.evaluate_candidate(signal)
+
+    assert eval_result.is_structural_problem is True
+    assert eval_result.total_score == 75
+    assert eval_result.proposed_project_name == "WebhookPulse"
+    assert eval_result.project_type == "Micro-SaaS / API Bridge"
+    assert "Lightweight proxy" in eval_result.mvp_scope
+    assert eval_result.suggested_pitch == "Reliable webhook ingress proxy with automated retry queues."
+
+
+@pytest.mark.asyncio
+async def test_synthesized_spec_contains_form_factor_and_solution():
+    """Verifies that ScoutSynthesizer populates form_factor and proposed_solution matching Mound schema."""
+    signal = RawPainSignal(
+        id="api_gateway_signal",
+        platform=PlatformSource.REDDIT,
+        title="Webhooks and external APIs keep dropping connections and hitting rate limits",
+        content="Our third-party API dependencies keep throwing 429 rate limit errors and silent webhook dropping.",
+        author="api_architect",
+        url="https://reddit.com/r/SaaS/comments/apipain",
+        engagement_count=45,
+    )
+    evaluation = OpportunityEvaluator.evaluate(signal)
+    spec = ScoutSynthesizer.synthesize_spec(signal, evaluation)
+
+    assert spec.form_factor is not None
+    assert len(spec.form_factor) >= 3
+    assert spec.proposed_solution is not None
+    assert len(spec.proposed_solution) >= 100
+    assert "proxy" in spec.proposed_solution.lower() or "gateway" in spec.proposed_solution.lower()
+
+    lint_res = await SpecLinter.lint(spec, skip_url_verification=True)
+    assert lint_res.passed
+    assert len(lint_res.errors) == 0
+
+
+def test_reddit_html_cleaning():
+    """Verifies that Reddit Atom RSS HTML boilerplate, tables, and entities are cleanly stripped."""
+    from app.scouts.reddit_scout import RedditScout
+
+    raw_html = (
+        '<!-- SC_OFF --><div class="md"><p>Here is an awesome &amp; powerful devtool.</p>\n'
+        '</div><!-- SC_ON --> &#32; submitted by &#32; <a href="https://www.reddit.com/user/dev"> /u/dev </a> '
+        '<table><tr><td><a href="https://example.com"><img src="https://example.com/thumb.jpg" /></a></td></tr></table>'
+    )
+    cleaned = RedditScout._clean_html_text(raw_html)
+    assert cleaned == "Here is an awesome & powerful devtool."
+    assert "<table>" not in cleaned
+    assert "submitted by" not in cleaned
+    assert "SC_OFF" not in cleaned
+
+
+def test_developer_tool_integrating_with_consumer_platform_not_disqualified():
+    """Verifies that developer tools automating/integrating with mobile apps (e.g. Instagram/Spotify)
+
+    are NOT falsely disqualified as consumer complaints.
+    """
+    signal = RawPainSignal(
+        id="iphone_mcp_server",
+        platform=PlatformSource.REDDIT,
+        title="I built an open-source MCP server so AI agents can control a real iPhone",
+        content=(
+            "I built an open-source Model Context Protocol (MCP) server that connects AI coding agents "
+            "directly to real iOS devices over USB. In this demo, the agent opens Instagram, takes a photo, "
+            "and automates multi-step QA test loops across mobile apps."
+        ),
+        author="agent_dev",
+        url="https://reddit.com/r/SideProject/comments/iphone_mcp",
+        engagement_count=28,
+    )
+    # Tier 1 should NOT disqualify this!
+    disqualification = OpportunityEvaluator.check_tier1_disqualification(signal)
+    assert disqualification is None
+
+
+def test_llm_json_extractor_resilience():
+    """Verifies that LLMEvaluator robustly recovers JSON with trailing commas, markdown fences, and syntax flaws."""
+    from app.services.llm_evaluator import LLMEvaluator
+
+    # 1. Trailing comma and markdown codeblock
+    messy_json = """```json
+    {
+      "is_viable_project": true,
+      "proposed_project_name": "ScreenMask",
+      "project_type": "Desktop Utility",
+      "tam_score": 19,
+      "urgency_score": 21,
+      "willingness_to_pay_score": 18,
+      "feasibility_score": 22,
+      "suggested_pitch": "Hides API keys and secrets during screen sharing",
+      "mvp_scope": "Menu bar app masking tokens on screen",
+      "rationale": "High-urgency privacy tool.",
+    }
+    ```"""
+    parsed = LLMEvaluator._extract_and_parse_json(messy_json)
+    assert parsed["is_viable_project"] is True
+    assert parsed["proposed_project_name"] == "ScreenMask"
+    assert parsed["tam_score"] == 19
+    assert parsed["feasibility_score"] == 22
+
+    # 2. Syntax imperfection with unescaped quote inside rationale (triggers regex fallback)
+    corrupted_json = """
+    {
+      "is_viable_project": true,
+      "proposed_project_name": "DocCitationValidator",
+      "project_type": "Micro-SaaS",
+      "tam_score": 22,
+      "urgency_score": 20,
+      "willingness_to_pay_score": 21,
+      "feasibility_score": 19,
+      "suggested_pitch": "Automated citation verifying financial claims against PDFs",
+      "mvp_scope": "Parses tables and checks claim references",
+      "rationale": "Enterprise analysts said "we spend hours on this" so it has high WTP"
+    }
+    """
+    fallback_parsed = LLMEvaluator._extract_and_parse_json(corrupted_json)
+    assert fallback_parsed["is_viable_project"] is True
+    assert fallback_parsed["proposed_project_name"] == "DocCitationValidator"
+    assert fallback_parsed["tam_score"] == 22
+    assert fallback_parsed["willingness_to_pay_score"] == 21

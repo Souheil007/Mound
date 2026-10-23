@@ -1,13 +1,21 @@
 """Application configuration and environment settings."""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ENV_FILES = (
+    _BACKEND_DIR / ".env",
+    Path(".env"),
+)
 
 
 class Settings(BaseSettings):
     """Loads and validates environment settings for the Mound platform."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         extra="ignore",
     )

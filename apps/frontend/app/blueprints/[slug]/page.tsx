@@ -75,6 +75,11 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
               <span className="text-xs font-mono text-slate-400">
                 VERSION {blueprint.current_version_num}.0
               </span>
+              {spec.form_factor && (
+                <span className="text-xs font-mono px-2.5 py-0.5 bg-forge-amber/15 text-forge-amber font-medium rounded border border-forge-amber/30">
+                  {spec.form_factor}
+                </span>
+              )}
               {spec.domain_tags?.map((tag) => (
                 <span
                   key={tag}
@@ -139,7 +144,7 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
             {/* Zone 1: Problem Statement & Verified Evidence */}
             <div className="p-6 sm:p-7 space-y-4">
               <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold flex items-center space-x-2">
-                <span>01 // Problem Statement</span>
+                <span>01 // The Problem</span>
               </h2>
               <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
                 {spec.problem_statement}
@@ -169,10 +174,22 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
               )}
             </div>
 
-            {/* Zone 2: Core MVP Deliverables */}
+            {/* Zone 2: Proposed Solution */}
+            {spec.proposed_solution && (
+              <div className="p-6 sm:p-7 border-t border-forge-border/80 bg-forge-surface/30 space-y-4">
+                <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold flex items-center space-x-2">
+                  <span>02 // Proposed Solution</span>
+                </h2>
+                <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+                  {spec.proposed_solution}
+                </p>
+              </div>
+            )}
+
+            {/* Zone 3: Core MVP Deliverables */}
             <div className="p-6 sm:p-7 border-t border-forge-border/80 bg-forge-bg/30 space-y-4">
               <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold flex items-center space-x-2">
-                <span>02 // Core MVP Deliverables</span>
+                <span>{spec.proposed_solution ? "03 // Core MVP Deliverables" : "02 // Core MVP Deliverables"}</span>
               </h2>
               <ul className="space-y-3">
                 {spec.mvp_deliverables?.map((item, idx) => (
@@ -186,10 +203,10 @@ export default async function BlueprintDetailPage({ params }: BlueprintPageProps
               </ul>
             </div>
 
-            {/* Zone 3: Acceptance Criteria & Verification */}
+            {/* Zone 4: Acceptance Criteria & Verification */}
             <div className="p-6 sm:p-7 border-t border-forge-border/80 space-y-4">
               <h2 className="text-xs font-mono uppercase tracking-wider text-forge-amber font-semibold flex items-center space-x-2">
-                <span>03 // Acceptance Criteria & Verification</span>
+                <span>{spec.proposed_solution ? "04 // Acceptance Criteria & Verification" : "03 // Acceptance Criteria & Verification"}</span>
               </h2>
               <div className="grid grid-cols-1 gap-2.5">
                 {spec.acceptance_criteria?.map((item, idx) => (

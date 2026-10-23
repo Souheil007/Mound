@@ -16,15 +16,15 @@ from app.core.database import async_session_maker
 from app.models.agent import Agent
 from app.models.user import User
 from app.schemas.blueprint_api import BlueprintCreateRequest
+from app.scouts.github_scout import GitHubScout
+from app.scouts.hn_scout import HNScout
+from app.scouts.models import PlatformSource, RawPainSignal
+from app.scouts.reddit_scout import RedditScout
 from app.services.blueprint_service import BlueprintService
 from app.services.dedup_engine import DedupEngine
 from app.services.opportunity_evaluator import OpportunityEvaluator
 from app.services.scout_synthesizer import ScoutSynthesizer
 from app.services.spec_linter import SpecLinter
-from app.scouts.github_scout import GitHubScout
-from app.scouts.hn_scout import HNScout
-from app.scouts.models import PlatformSource, RawPainSignal
-from app.scouts.reddit_scout import RedditScout
 
 logger = logging.getLogger("mound.scouts")
 
@@ -48,9 +48,21 @@ async def ensure_scout_agents_exist() -> dict[PlatformSource, Agent]:
 
         scout_map: dict[PlatformSource, Agent] = {}
         scout_definitions = [
-            (PlatformSource.REDDIT, "RedditScout", "Autonomous scout monitoring r/SaaS and r/devops for commercial software agony"),
-            (PlatformSource.HACKERNEWS, "HNScout", "Autonomous scout polling Hacker News discussions for unbuilt architectural tools"),
-            (PlatformSource.GITHUB, "GitHubScout", "Autonomous scout analyzing top open-source issues for multi-year community pain"),
+            (
+                PlatformSource.REDDIT,
+                "RedditScout",
+                "Autonomous scout monitoring r/SaaS and r/devops for commercial software agony",
+            ),
+            (
+                PlatformSource.HACKERNEWS,
+                "HNScout",
+                "Autonomous scout polling Hacker News discussions for unbuilt architectural tools",
+            ),
+            (
+                PlatformSource.GITHUB,
+                "GitHubScout",
+                "Autonomous scout analyzing top open-source issues for multi-year community pain",
+            ),
         ]
 
         for platform, name, desc in scout_definitions:
@@ -131,7 +143,7 @@ class ScoutOrchestrator:
         qualified_evaluations: list[tuple[RawPainSignal, Any]] = []
 
         # 2. Evaluate through the 2-Tier Architecture (Tier 1 Heuristics + Tier 2 Mistral / Semantic)
-        sem = asyncio.Semaphore(4)
+        sem = asyncio.Semaphore(2)
 
         async def eval_signal(signal: RawPainSignal):
             async with sem:
@@ -141,7 +153,14 @@ class ScoutOrchestrator:
         evaluations = await asyncio.gather(*(eval_signal(s) for s in raw_signals))
 
         for signal, eval_res in evaluations:
-            if eval_res.is_structural_problem and eval_res.total_score >= OpportunityEvaluator.MIN_PASSING_TOTAL:
+            if (
+                eval_res.is_structural_problem
+                and eval_res.total_score >= OpportunityEvaluator.MIN_PASSING_TOTAL
+                and eval_res.tam_score >= OpportunityEvaluator.MIN_DIMENSION_SCORE
+                and eval_res.urgency_score >= OpportunityEvaluator.MIN_DIMENSION_SCORE
+                and eval_res.willingness_to_pay_score >= OpportunityEvaluator.MIN_DIMENSION_SCORE
+                and eval_res.feasibility_score >= OpportunityEvaluator.MIN_DIMENSION_SCORE
+            ):
                 qualified_evaluations.append((signal, eval_res))
                 logger.info(
                     "QUALIFIED OPPORTUNITY [%s]: %s (Score: %d/100)",
@@ -181,7 +200,9 @@ class ScoutOrchestrator:
                     # Deduplication gate
                     dedup_res = await DedupEngine.check_duplicate(session, spec)
                     if dedup_res.is_duplicate:
-                        logger.info("Duplicate detected against %s. Skipping duplicate proposal.", dedup_res.existing_title)
+                        logger.info(
+                            "Duplicate detected against %s. Skipping duplicate proposal.", dedup_res.existing_title
+                        )
                         continue
 
                     # Publish Blueprint
@@ -189,15 +210,17 @@ class ScoutOrchestrator:
                     created_bp = await BlueprintService.create_blueprint(session, req)
                     logger.info("PUBLISHED BLUEPRINT: %s (id: %s)", created_bp.slug, created_bp.id)
 
-                    published_blueprints.append({
-                        "blueprint_id": str(created_bp.id),
-                        "slug": created_bp.slug,
-                        "title": spec.one_line_pitch,
-                        "scout_agent": agent.name,
-                        "platform": signal.platform.value,
-                        "source_url": signal.url,
-                        "score": evaluation.total_score,
-                    })
+                    published_blueprints.append(
+                        {
+                            "blueprint_id": str(created_bp.id),
+                            "slug": created_bp.slug,
+                            "title": spec.one_line_pitch,
+                            "scout_agent": agent.name,
+                            "platform": signal.platform.value,
+                            "source_url": signal.url,
+                            "score": evaluation.total_score,
+                        }
+                    )
                 except Exception as exc:
                     logger.error("Failed to publish blueprint for signal %s: %s", signal.id, exc)
                     continue

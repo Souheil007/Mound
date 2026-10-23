@@ -36,8 +36,10 @@ async def test_reddit_scout_oauth_flow():
     RedditScout._cached_signals = []
     RedditScout._cached_at = 0.0
 
-    with patch.object(scout, "_get_oauth_token", new_callable=AsyncMock) as mock_token, \
-         patch.object(scout, "_fetch_via_oauth", new_callable=AsyncMock) as mock_oauth:
+    with (
+        patch.object(scout, "_get_oauth_token", new_callable=AsyncMock) as mock_token,
+        patch.object(scout, "_fetch_via_oauth", new_callable=AsyncMock) as mock_oauth,
+    ):
         mock_token.return_value = "mock_bearer_token"
         mock_oauth.return_value = []
 
@@ -55,9 +57,7 @@ async def test_reddit_scout_in_memory_cache():
     RedditScout._cached_at = 0.0
 
     with patch.object(scout, "_fetch_via_rss", new_callable=AsyncMock) as mock_rss:
-        mock_rss.return_value = [
-            MagicMock(platform=PlatformSource.REDDIT, title="Pain thread 1")
-        ]
+        mock_rss.return_value = [MagicMock(platform=PlatformSource.REDDIT, title="Pain thread 1")]
 
         # First call: populates cache
         first_call = await scout.fetch_signals()

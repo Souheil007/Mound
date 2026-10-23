@@ -63,3 +63,10 @@ Thumbs.db
 
 # Docker
 *.local
+
+# Temporary & Scratch
+scratch/
+*.mp3
+
+#Brag Skill
+brag-output

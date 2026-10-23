@@ -1,8 +1,10 @@
 """Reddit Scout module polling public subreddits for developer and business workflow agony."""
 
 import asyncio
+import html
 import logging
 import os
+import re
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -47,6 +49,21 @@ class RedditScout:
     _cached_signals: list[RawPainSignal] = []
     _cached_at: float = 0.0
     _cache_ttl_seconds: float = 300.0  # 5 minutes
+
+    @staticmethod
+    def _clean_html_text(raw_text: str | None) -> str:
+        """Cleans raw RSS Atom HTML content into clean readable text for evaluation and embedding."""
+        if not raw_text:
+            return ""
+        text = html.unescape(raw_text)
+        text = re.sub(r"<!--\s*SC_OFF\s*-->", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<!--\s*SC_ON\s*-->", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bsubmitted by\b.*$", " ", text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"<table.*?>.*?</table>", " ", text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n\s*\n+", "\n\n", text)
+        return text.strip()
 
     def __init__(
         self,
@@ -222,9 +239,12 @@ class RedditScout:
                                 pass
 
                         title_el = entry.find("atom:title", ns)
-                        title = title_el.text if title_el is not None and title_el.text else ""
+                        raw_title = title_el.text if title_el is not None and title_el.text else ""
+                        title = self._clean_html_text(raw_title)
+
                         content_el = entry.find("atom:content", ns)
-                        selftext = content_el.text if content_el is not None and content_el.text else ""
+                        raw_content = content_el.text if content_el is not None and content_el.text else ""
+                        selftext = self._clean_html_text(raw_content)
                         full_text = f"{title} {selftext}".lower()
 
                         if not any(kw in full_text for kw in PAIN_KEYWORDS):

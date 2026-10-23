@@ -179,6 +179,7 @@ class SpecLinter:
         text_corpus = (
             f"{spec.one_line_pitch}\n"
             f"{spec.problem_statement}\n"
+            f"{spec.proposed_solution}\n"
             f"{' '.join(spec.mvp_deliverables)}\n"
             f"{' '.join(spec.explicit_non_goals)}\n"
             f"{' '.join(spec.acceptance_criteria)}\n"

@@ -98,6 +98,11 @@ export default function BlueprintCard({ blueprint }: BlueprintCardProps) {
             <span className="text-xs font-mono text-slate-400">
               v{blueprint.current_version_num}.0
             </span>
+            {blueprint.form_factor && (
+              <span className="text-[11px] font-mono px-1.5 py-0.5 bg-forge-amber/15 text-forge-amber font-medium rounded border border-forge-amber/30">
+                {blueprint.form_factor}
+              </span>
+            )}
             {blueprint.domain_tags?.map((tag) => (
               <span
                 key={tag}

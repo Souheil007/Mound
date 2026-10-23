@@ -258,6 +258,7 @@ class BlueprintService:
                     id=bp.id,
                     slug=bp.slug,
                     one_line_pitch=spec.get("one_line_pitch", ""),
+                    form_factor=spec.get("form_factor"),
                     domain_tags=spec.get("domain_tags", []),
                     status=bp.status,
                     current_version_num=bp.current_version_num,
@@ -727,11 +728,7 @@ class BlueprintService:
         if not resolved_id:
             raise ValueError(f"Blueprint with ID '{blueprint_id}' does not exist.")
 
-        bp_stmt = (
-            select(Blueprint)
-            .options(selectinload(Blueprint.versions))
-            .where(Blueprint.id == resolved_id)
-        )
+        bp_stmt = select(Blueprint).options(selectinload(Blueprint.versions)).where(Blueprint.id == resolved_id)
         bp_res = await session.execute(bp_stmt)
         blueprint = bp_res.scalar_one_or_none()
         if not blueprint:
@@ -748,14 +745,10 @@ class BlueprintService:
         is_creator = blueprint.creator_agent_id == request.author_agent_id
         is_co_author = request.author_agent_id in (blueprint.co_author_agent_ids or [])
         now = datetime.now(timezone.utc)
-        is_timed_out = (
-            blueprint.revision_requested_at is not None
-            and (now - blueprint.revision_requested_at) >= timedelta(hours=48)
-        )
-        is_community_open = (
-            blueprint.status == BlueprintStatus.OPEN_FOR_COMMUNITY_REVISION
-            or is_timed_out
-        )
+        is_timed_out = blueprint.revision_requested_at is not None and (
+            now - blueprint.revision_requested_at
+        ) >= timedelta(hours=48)
+        is_community_open = blueprint.status == BlueprintStatus.OPEN_FOR_COMMUNITY_REVISION or is_timed_out
 
         if not (is_creator or is_co_author):
             if not is_community_open:
@@ -806,9 +799,7 @@ class BlueprintService:
         blueprint.current_version_num = next_version_num
         blueprint.revision_requested_at = None
         if blueprint.status == BlueprintStatus.OPEN_FOR_COMMUNITY_REVISION:
-            blueprint.status = (
-                BlueprintStatus.QUALIFIED if blueprint.upvotes_count >= 10 else BlueprintStatus.OPEN
-            )
+            blueprint.status = BlueprintStatus.QUALIFIED if blueprint.upvotes_count >= 10 else BlueprintStatus.OPEN
 
         await session.commit()
         await session.refresh(blueprint)
@@ -849,9 +840,7 @@ class BlueprintService:
             raise ValueError(f"Agent with ID '{agent_id}' does not exist.")
 
         bp_stmt = (
-            select(Blueprint)
-            .options(selectinload(Blueprint.comments))
-            .where(Blueprint.creator_agent_id == agent_id)
+            select(Blueprint).options(selectinload(Blueprint.comments)).where(Blueprint.creator_agent_id == agent_id)
         )
         bp_res = await session.execute(bp_stmt)
         blueprints = bp_res.scalars().all()
@@ -888,4 +877,3 @@ class BlueprintService:
             unaddressed_critiques=notifications,
             total_unaddressed=len(notifications),
         )
-

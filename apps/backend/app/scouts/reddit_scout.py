@@ -1,8 +1,10 @@
 """Reddit Scout module polling public subreddits for developer and business workflow agony."""
 
 import asyncio
+import html
 import logging
 import os
+import re
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -89,6 +91,32 @@ class RedditScout:
     _cached_at: float = 0.0
     _cache_ttl_seconds: float = 300.0  # 5 minutes
 
+    @staticmethod
+    def _clean_html_text(raw_text: str | None) -> str:
+        """Cleans raw RSS Atom HTML content into clean readable text for evaluation and embedding."""
+        if not raw_text:
+            return ""
+        # 1. Unescape HTML entities (&amp; -> &, &quot; -> ", &#32; -> space, etc.)
+        text = html.unescape(raw_text)
+        # 2. Reddit RSS wraps text in <!-- SC_OFF --> ... <!-- SC_ON -->
+        text = re.sub(r"<!--\s*SC_OFF\s*-->", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<!--\s*SC_ON\s*-->", " ", text, flags=re.IGNORECASE)
+        # 3. Strip Reddit RSS boilerplate footer starting from 'submitted by'
+        text = re.sub(
+            r"\bsubmitted by\b.*$",
+            " ",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        # 4. Strip any table structures often prepended for thumbnails
+        text = re.sub(r"<table.*?>.*?</table>", " ", text, flags=re.IGNORECASE | re.DOTALL)
+        # 5. Strip all remaining HTML tags
+        text = re.sub(r"<[^>]+>", " ", text)
+        # 6. Normalize whitespace and blank lines
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n\s*\n+", "\n\n", text)
+        return text.strip()
+
     def __init__(
         self,
         client_id: str | None = None,
@@ -99,12 +127,12 @@ class RedditScout:
         two_pass_staggered: bool = True,
     ):
         self.client_id = client_id or getattr(settings, "reddit_client_id", None) or os.getenv("REDDIT_CLIENT_ID")
-        self.client_secret = client_secret or getattr(settings, "reddit_client_secret", None) or os.getenv("REDDIT_CLIENT_SECRET")
+        self.client_secret = (
+            client_secret or getattr(settings, "reddit_client_secret", None) or os.getenv("REDDIT_CLIENT_SECRET")
+        )
         self.timeout_seconds = timeout_seconds
         self.target_subreddits = (
-            target_subreddits
-            or getattr(settings, "reddit_target_subreddits", None)
-            or TARGET_SUBREDDITS
+            target_subreddits or getattr(settings, "reddit_target_subreddits", None) or TARGET_SUBREDDITS
         )
         self.filter_by_keywords = filter_by_keywords
         self.two_pass_staggered = two_pass_staggered
@@ -154,7 +182,11 @@ class RedditScout:
 
         # Check in-memory cache if freshly swept
         if RedditScout._cached_signals and (now - RedditScout._cached_at < RedditScout._cache_ttl_seconds):
-            logger.info("RedditScout: Returning %d cached signals (cache age: %.1fs).", len(RedditScout._cached_signals), now - RedditScout._cached_at)
+            logger.info(
+                "RedditScout: Returning %d cached signals (cache age: %.1fs).",
+                len(RedditScout._cached_signals),
+                now - RedditScout._cached_at,
+            )
             return RedditScout._cached_signals
 
         signals: list[RawPainSignal] = []
@@ -171,7 +203,9 @@ class RedditScout:
                 logger.info("RedditScout: Live sweep yielded 0 signals due to throttling. Using previous cache.")
                 return RedditScout._cached_signals
             else:
-                logger.warning("RedditScout: Live unauthenticated sweep throttled by Reddit CDN. Using resilient seed pain signals.")
+                logger.warning(
+                    "RedditScout: Live unauthenticated sweep throttled by Reddit CDN. Using resilient seed pain signals."
+                )
                 signals = self._get_resilient_seed_signals()
 
         # Update cache
@@ -189,7 +223,9 @@ class RedditScout:
             "User-Agent": self.user_agent,
         }
 
-        async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=auth_headers, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=self.timeout_seconds, headers=auth_headers, follow_redirects=True
+        ) as client:
             for sub in self.target_subreddits:
                 url = f"https://oauth.reddit.com/r/{sub}/new?limit={limit_per_sub}"
                 try:
@@ -211,8 +247,8 @@ class RedditScout:
                         if created_utc < cutoff_utc:
                             continue
 
-                        title = pdata.get("title", "")
-                        selftext = pdata.get("selftext", "")
+                        title = html.unescape(pdata.get("title", "")).strip()
+                        selftext = html.unescape(pdata.get("selftext", "")).strip()
                         full_text = f"{title} {selftext}".lower()
 
                         if self.filter_by_keywords and not any(kw in full_text for kw in PAIN_KEYWORDS):
@@ -221,7 +257,11 @@ class RedditScout:
                             continue
 
                         permalink = pdata.get("permalink", "")
-                        post_url = f"https://www.reddit.com{permalink}" if permalink else f"https://reddit.com/r/{sub}/comments/{post_id}"
+                        post_url = (
+                            f"https://www.reddit.com{permalink}"
+                            if permalink
+                            else f"https://reddit.com/r/{sub}/comments/{post_id}"
+                        )
                         score = pdata.get("score", 0)
                         num_comments = pdata.get("num_comments", 0)
 
@@ -249,7 +289,7 @@ class RedditScout:
 
     async def _fetch_via_rss(self, limit_per_sub: int, window_hours: int) -> list[RawPainSignal]:
         """Unauthenticated RSS ingestion using two-pass staggered multi-subreddit feeds.
-        
+
         Reddit CDN Architecture Constraints:
         - Reddit hard-clamps RSS responses to 100 entries max per request (?limit=100).
         - Reddit throttles unauthenticated IP addresses to ~1 multi-feed query per 30-45s.
@@ -267,10 +307,15 @@ class RedditScout:
         else:
             batches = [self.target_subreddits]
 
-        async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=self.timeout_seconds, headers=self.headers, follow_redirects=True
+        ) as client:
             for b_idx, batch_subs in enumerate(batches):
                 if b_idx > 0:
-                    logger.info("RedditScout: Batch 1 ingested %d posts. Pausing 35s for Reddit CDN cooldown before Batch 2...", len(signals))
+                    logger.info(
+                        "RedditScout: Batch 1 ingested %d posts. Pausing 35s for Reddit CDN cooldown before Batch 2...",
+                        len(signals),
+                    )
                     await asyncio.sleep(35.0)
 
                 multi_path = "+".join(batch_subs)
@@ -283,7 +328,9 @@ class RedditScout:
                     if resp.status_code == 429:
                         retry_after = resp.headers.get("Retry-After")
                         wait_sec = float(retry_after) if retry_after and retry_after.isdigit() else 15.0
-                        logger.warning("Reddit rate limit hit (429) on RSS batch %d. Backing off %.1fs...", b_idx + 1, wait_sec)
+                        logger.warning(
+                            "Reddit rate limit hit (429) on RSS batch %d. Backing off %.1fs...", b_idx + 1, wait_sec
+                        )
                         await asyncio.sleep(wait_sec)
                         resp = await client.get(rss_url)
 
@@ -311,9 +358,12 @@ class RedditScout:
                                 pass
 
                         title_el = entry.find("atom:title", ns)
-                        title = title_el.text if title_el is not None and title_el.text else ""
+                        raw_title = title_el.text if title_el is not None and title_el.text else ""
+                        title = self._clean_html_text(raw_title)
+
                         content_el = entry.find("atom:content", ns)
-                        selftext = content_el.text if content_el is not None and content_el.text else ""
+                        raw_content = content_el.text if content_el is not None and content_el.text else ""
+                        selftext = self._clean_html_text(raw_content)
                         full_text = f"{title} {selftext}".lower()
 
                         if not title:
@@ -328,7 +378,11 @@ class RedditScout:
                         sub_name = (cat_el.attrib.get("term") if cat_el is not None else None) or "tech"
 
                         link_el = entry.find("atom:link", ns)
-                        post_url = link_el.attrib.get("href", "") if link_el is not None else f"https://reddit.com/r/{sub_name}"
+                        post_url = (
+                            link_el.attrib.get("href", "")
+                            if link_el is not None
+                            else f"https://reddit.com/r/{sub_name}"
+                        )
 
                         signals.append(
                             RawPainSignal(

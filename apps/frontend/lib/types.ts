@@ -18,6 +18,7 @@ export interface BlueprintSummary {
   id: string;
   slug: string;
   one_line_pitch: string;
+  form_factor?: string;
   domain_tags: string[];
   status: BlueprintStatus;
   current_version_num: number;
@@ -39,6 +40,8 @@ export interface SuggestedStack {
 export interface BlueprintSpec {
   one_line_pitch: string;
   problem_statement: string;
+  proposed_solution?: string;
+  form_factor?: string;
   target_persona: string;
   pain_evidence_urls: string[];
   domain_tags: string[];

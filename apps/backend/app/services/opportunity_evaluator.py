@@ -5,7 +5,6 @@ Tier 2: Semantic & LLM Evaluator (evaluates innovation, market viability, and st
 """
 
 import re
-from typing import Any
 
 from app.scouts.models import OpportunityEvaluation, RawPainSignal
 from app.services.llm_evaluator import LLMEvaluator
@@ -25,11 +24,10 @@ TRIVIAL_BUG_PATTERNS = [
     r"\bpage reload doesn't work\b",
     r"\bdeprecat(ed|ion)\s+warning\b",
     r"\bfailed to compile\b",
-    r"\bpermission denied\b",
+    r"\b(error:\s*eacces:\s*permission denied|errno 13 permission denied|bash:\s*permission denied)\b",
     r"\bunexpected token\b",
     r"\bspelling typo\b",
     r"\bsegmentation fault\b",
-    r"\bunhandled promise rejection\b",
     r"\battributeerror\b",
 ]
 
@@ -38,23 +36,24 @@ REPO_CHORE_PATTERNS = [
     r"\b(release readiness|post-v\d+\.\d+|bump version|milestone closure|acceptance gates?)\b",
     r"\b(re:\s*shape reconciliation|re:\s*perf\(|re:\s*compiler\(|re:\s*\[integrated)\b",
     r"\b(flaky test:\s*\w+)\b",
-    r"\b(dual-account coordination|manifest d[aâ]y|manifest bi[eê]n|db rehearsal)\b",
-    r"\b(chuyển heroku sang|migration manifest)\b",
+    r"\b(db rehearsal|migration manifest)\b",
 ]
 
-# Disqualifier 3: Consumer complaints, personal subscriptions, and mobile apps
+# Disqualifier 3: Consumer complaints, personal subscriptions, and gaming
 CONSUMER_AND_MOBILE_PATTERNS = [
-    r"\b(iphone|ipad|ios app|android app|macos app)\b",
-    r"\b(battery drain|dark mode|font size|screen brightness)\b",
-    r"\b(student discount|personal tier|hobbyist|pricing in (india|brazil|turkey))\b",
-    r"\b(chatgpt plus|claude pro|spotify|netflix|steam|playstation|xbox)\b",
-    r"\b(dating app|social media algorithm|instagram|tiktok|youtube recommender)\b",
-    r"\b(cancel my subscription|refund my 20 dollars)\b",
+    r"\b(battery drain|dark mode toggle|font size too small|screen brightness)\b",
+    r"\b(student discount|personal tier pricing|pricing in (india|brazil|turkey))\b",
+    r"\b(chatgpt plus|claude pro|spotify|netflix|disney\+|hulu)\s+(subscription|billing|price hike|buffering|stuttering|too expensive|account)\b",
+    r"\b(playstation|xbox|nintendo|steam)\s+(controller|psn|game crash|refund|drm|ban)\b",
+    r"\b(dating app|tinder|bumble|hinge)\b",
+    r"\b(social media algorithm|youtube recommender algorithm)\b",
+    r"\b(instagram|tiktok|snapchat|youtube)\s+(algorithm|shadowban|feed|reel|follower count|stole my account)\b",
+    r"\b(cancel my subscription|refund my (\$\d+|\d+\s*dollars?)|refund request)\b",
 ]
 
 # Disqualifier 4: Framework flame wars, homework, or beginner tutorials
 LOCAL_DEV_AND_OPINION_PATTERNS = [
-    r"\b(iframe support|cypress|vitest|jest mock|webpack config|eslint rule|prettier)\b",
+    r"\b(iframe support|webpack config|eslint rule|prettier)\b",
     r"\b(zsh autocomplete|sublime text|terminal font|theme)\b",
     r"\b(why i hate|php in 20\d\d|is \w+ dead|should i learn \w+|switch from \w+ to \w+)\b",
     r"\b(tabs vs spaces|vim vs emacs|my first project|help with homework)\b",
@@ -70,13 +69,13 @@ SPAM_PATTERNS = [
 
 class OpportunityEvaluator:
     """Evaluates raw signals using the 2-Tier Hybrid Architecture.
-    
+
     Tier 1 (Heuristic Pruning): Discards obvious non-opportunities in < 1ms.
     Tier 2 (Semantic / LLM Evaluation): Evaluates valid candidates via 384-dim dense vectors or LLM reasoning.
     """
 
-    MIN_PASSING_TOTAL = 80
-    MIN_DIMENSION_SCORE = 12
+    MIN_PASSING_TOTAL = 70
+    MIN_DIMENSION_SCORE = 10
 
     @classmethod
     def check_tier1_disqualification(cls, signal: RawPainSignal) -> OpportunityEvaluation | None:
@@ -84,24 +83,41 @@ class OpportunityEvaluator:
         combined_text = f"{signal.title}\n{signal.content}".lower()
 
         for pat in TRIVIAL_BUG_PATTERNS:
-            if re.search(pat, combined_text):
-                return cls._disqualify(signal, "Local technical bug, compiler warning, or syntax error.")
+            m = re.search(pat, combined_text)
+            if m:
+                return cls._disqualify(
+                    signal, f"Local technical bug, compiler warning, or syntax error (matched: '{m.group(0)}')"
+                )
 
         for pat in REPO_CHORE_PATTERNS:
-            if re.search(pat, combined_text):
-                return cls._disqualify(signal, "Single-repository internal maintenance chore, release ticket, or PR discussion.")
+            m = re.search(pat, combined_text)
+            if m:
+                return cls._disqualify(
+                    signal, f"Single-repository internal maintenance chore or PR discussion (matched: '{m.group(0)}')"
+                )
 
         for pat in CONSUMER_AND_MOBILE_PATTERNS:
-            if re.search(pat, combined_text):
-                return cls._disqualify(signal, "Consumer software, mobile app, or personal subscription complaint.")
+            m = re.search(pat, combined_text)
+            if m:
+                return cls._disqualify(
+                    signal,
+                    f"Consumer software, mobile app, or personal subscription complaint (matched: '{m.group(0)}')",
+                )
 
         for pat in LOCAL_DEV_AND_OPINION_PATTERNS:
-            if re.search(pat, combined_text):
-                return cls._disqualify(signal, "Local dev tooling quirk, framework opinion piece, or tutorial question.")
+            m = re.search(pat, combined_text)
+            if m:
+                return cls._disqualify(
+                    signal,
+                    f"Local dev tooling quirk, framework opinion piece, or tutorial question (matched: '{m.group(0)}')",
+                )
 
         for pat in SPAM_PATTERNS:
-            if re.search(pat, combined_text):
-                return cls._disqualify(signal, "Promotional spam, token airdrop, or landing page roasting.")
+            m = re.search(pat, combined_text)
+            if m:
+                return cls._disqualify(
+                    signal, f"Promotional spam, token airdrop, or landing page roasting (matched: '{m.group(0)}')"
+                )
 
         return None
 
@@ -136,6 +152,10 @@ class OpportunityEvaluator:
             willingness_to_pay_score=2,
             feasibility_score=5,
             total_score=15,
+            proposed_project_name=None,
+            project_type=None,
+            mvp_scope=None,
             rationale=f"Disqualified: {reason}",
+            suggested_pitch=None,
             rejection_reason=reason,
         )

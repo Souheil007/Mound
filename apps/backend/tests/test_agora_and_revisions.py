@@ -101,7 +101,7 @@ async def test_blueprint_voting_and_qualification(
 
     # 5. Simulate 10 upvotes to graduate to QUALIFIED
     for i in range(10):
-        u = User(github_id=f"gh_voter_{i+2}", username=f"voter_{i+2}")
+        u = User(github_id=f"gh_voter_{i + 2}", username=f"voter_{i + 2}")
         db_session.add(u)
         await db_session.commit()
         await db_session.refresh(u)
@@ -142,9 +142,7 @@ async def test_critiques_revision_trigger_and_notifications(
         "/api/v1/blueprints",
         json={
             "agent_id": agent_id,
-            "spec": valid_spec_payload(
-                "High-throughput PostgreSQL index tuning agent with automated rollback"
-            ),
+            "spec": valid_spec_payload("High-throughput PostgreSQL index tuning agent with automated rollback"),
         },
     )
     assert prop_res.status_code == 201
@@ -202,9 +200,7 @@ async def test_critiques_revision_trigger_and_notifications(
     assert len(data["unaddressed_critiques"]) == 3
 
     # 6. Creator agent addresses feedback and publishes v2
-    revised_spec = valid_spec_payload(
-        "High-throughput PostgreSQL index tuning agent with automated rollback v2"
-    )
+    revised_spec = valid_spec_payload("High-throughput PostgreSQL index tuning agent with automated rollback v2")
     revised_spec["mvp_deliverables"].append("Automatic index rollback on memory pressure")
 
     v2_res = await client.post(
@@ -249,9 +245,7 @@ async def test_optimistic_locking_conflict(
         "/api/v1/blueprints",
         json={
             "agent_id": agent_id,
-            "spec": valid_spec_payload(
-                "Concurrency test specification for pessimistic lock mitigation in engines"
-            ),
+            "spec": valid_spec_payload("Concurrency test specification for pessimistic lock mitigation in engines"),
         },
     )
     bp_id = prop_res.json()["id"]
@@ -262,9 +256,7 @@ async def test_optimistic_locking_conflict(
         json={
             "author_agent_id": agent_id,
             "expected_version_num": 5,
-            "spec": valid_spec_payload(
-                "Concurrency specification bump resolving deadlock conflicts across workers"
-            ),
+            "spec": valid_spec_payload("Concurrency specification bump resolving deadlock conflicts across workers"),
             "changelog_summary": "Out of sync update",
         },
     )
@@ -307,9 +299,7 @@ async def test_48_hour_community_revision_fallback(
         "/api/v1/blueprints",
         json={
             "agent_id": creator_agent_id,
-            "spec": valid_spec_payload(
-                "Stalled architectural proposal needing community intervention and revision"
-            ),
+            "spec": valid_spec_payload("Stalled architectural proposal needing community intervention and revision"),
         },
     )
     bp_id = prop_res.json()["id"]
@@ -326,9 +316,7 @@ async def test_48_hour_community_revision_fallback(
         json={
             "author_agent_id": community_agent_id,
             "expected_version_num": 1,
-            "spec": valid_spec_payload(
-                "Premature community revision attempting unauthorized takeovers in windows"
-            ),
+            "spec": valid_spec_payload("Premature community revision attempting unauthorized takeovers in windows"),
             "changelog_summary": "Attempting early takeover.",
         },
     )
@@ -345,9 +333,7 @@ async def test_48_hour_community_revision_fallback(
         json={
             "author_agent_id": community_agent_id,
             "expected_version_num": 1,
-            "spec": valid_spec_payload(
-                "Community rescued architecture resolving unaddressed critiques in 48h loop"
-            ),
+            "spec": valid_spec_payload("Community rescued architecture resolving unaddressed critiques in 48h loop"),
             "changelog_summary": "Community v1.1 revision resolving unaddressed critiques after 48h timeout.",
         },
     )

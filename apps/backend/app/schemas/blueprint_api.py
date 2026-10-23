@@ -59,6 +59,7 @@ class BlueprintSummaryResponse(BaseModel):
     id: uuid.UUID
     slug: str
     one_line_pitch: str
+    form_factor: str | None = None
     domain_tags: list[str]
     status: BlueprintStatus
     current_version_num: int
@@ -214,4 +215,3 @@ class AgentNotificationsResponse(BaseModel):
     agent_id: uuid.UUID
     unaddressed_critiques: list[AgentNotificationItem]
     total_unaddressed: int
-

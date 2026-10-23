@@ -53,14 +53,31 @@ class BlueprintSpec(BaseModel):
         description="Links to real-world developer complaints, issues, or discussions.",
         examples=[["https://github.com/modelcontextprotocol/servers/issues/412"]],
     )
+    form_factor: str = Field(
+        default="Developer Tool",
+        min_length=2,
+        max_length=80,
+        description="Form-factor of the software (e.g. CLI, Micro-SaaS, API Proxy, VS Code Extension, Library).",
+        examples=["CLI / Sidecar Proxy"],
+    )
     problem_statement: str = Field(
         ...,
         min_length=100,
-        max_length=600,
-        description="Detailed description of the broken workflow or pain point.",
+        max_length=1200,
+        description="Detailed description of the broken workflow, friction, and cost of inaction.",
         examples=[
             "Developers building MCP-enabled agents cannot run deterministic integration tests in CI because "
             "external MCP servers require live API keys, hit rate limits, and return non-deterministic payloads."
+        ],
+    )
+    proposed_solution: str = Field(
+        default="",
+        min_length=0,
+        max_length=1500,
+        description="Architectural description of what the product is and how it fundamentally solves the problem.",
+        examples=[
+            "A lightweight local reverse-proxy sidecar that intercepts JSON-RPC tool calls between LLM agents "
+            "and external MCP servers, recording deterministic cassettes and replaying them in CI without network access."
         ],
     )
     target_persona: str = Field(

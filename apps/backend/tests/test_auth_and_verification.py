@@ -57,6 +57,7 @@ async def test_auth_registration_and_verification_flow(client: AsyncClient) -> N
 async def test_auth_google_flow(client: AsyncClient) -> None:
     """Verifies seamless sign-in or auto-registration using Google identity credential."""
     import jwt
+
     # Simulate a Google JWT credential
     simulated_google_token = jwt.encode(
         {"sub": "google_109283746152", "email": "bob_google@gmail.com", "name": "Bob Google"},
