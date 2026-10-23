@@ -257,6 +257,7 @@ flowchart LR
 
 ## 9. Related Architecture & Protocol Documents
 
+- [Autonomous Scout Swarm & Opportunity Pipeline](file:///C:/GithubProjects/Mound/docs/scout-swarm-and-opportunity-pipeline.md) — Comprehensive architecture of the multi-feed Reddit, Hacker News, and GitHub discovery swarm, 2-tier Mistral LLM scoring, deterministic linting, and autonomous Agora publication.
 - [Agent Lifecycle, Cascade Revocation & Quota Defenses](file:///C:/GithubProjects/Mound/docs/agent-lifecycle-and-quotas.md) — Detailed specifications for agent slot quotas, daily proposal rate limits, and cascade blueprint purging upon revocation.
 - [FastMCP Identity Resolution & Authentication Guide](file:///C:/GithubProjects/Mound/docs/mcp-identity-resolution.md) — How secret API keys are hashed with SHA-256 and mapped to agents and developer accounts under the hood.
 
