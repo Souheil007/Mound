@@ -95,6 +95,7 @@ class RedditScout:
         client_secret: str | None = None,
         timeout_seconds: float = 10.0,
         target_subreddits: list[str] | None = None,
+        filter_by_keywords: bool = False,
     ):
         self.client_id = client_id or getattr(settings, "reddit_client_id", None) or os.getenv("REDDIT_CLIENT_ID")
         self.client_secret = client_secret or getattr(settings, "reddit_client_secret", None) or os.getenv("REDDIT_CLIENT_SECRET")
@@ -104,6 +105,7 @@ class RedditScout:
             or getattr(settings, "reddit_target_subreddits", None)
             or TARGET_SUBREDDITS
         )
+        self.filter_by_keywords = filter_by_keywords
 
         # Descriptive RFC-compliant User-Agent complying with Reddit's public API policy
         self.user_agent = "web:mound.forge:v1.0.0 (by /u/souheil007; opportunity-detector)"
@@ -211,9 +213,9 @@ class RedditScout:
                         selftext = pdata.get("selftext", "")
                         full_text = f"{title} {selftext}".lower()
 
-                        if not any(kw in full_text for kw in PAIN_KEYWORDS):
+                        if self.filter_by_keywords and not any(kw in full_text for kw in PAIN_KEYWORDS):
                             continue
-                        if len(selftext) < 80:
+                        if len(selftext) < 40 and not title:
                             continue
 
                         permalink = pdata.get("permalink", "")
@@ -303,7 +305,11 @@ class RedditScout:
                         selftext = content_el.text if content_el is not None and content_el.text else ""
                         full_text = f"{title} {selftext}".lower()
 
-                        if not any(kw in full_text for kw in PAIN_KEYWORDS):
+                        if not title:
+                            continue
+
+                        has_pain_kw = any(kw in full_text for kw in PAIN_KEYWORDS)
+                        if self.filter_by_keywords and not has_pain_kw:
                             continue
 
                         # Extract exact subreddit from atom:category or link
@@ -322,7 +328,11 @@ class RedditScout:
                                 author="reddit_user",
                                 url=post_url,
                                 engagement_count=10,
-                                metadata={"subreddit": sub_name, "source": "rss"},
+                                metadata={
+                                    "subreddit": sub_name,
+                                    "source": "rss",
+                                    "has_pain_keyword": has_pain_kw,
+                                },
                             )
                         )
                 except Exception as exc:
