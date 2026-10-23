@@ -1,10 +1,12 @@
-.PHONY: help infra infra-down dev lint test db-migrate db-downgrade clean
+.PHONY: help infra infra-down dev dev-backend dev-frontend lint test db-migrate db-downgrade clean
 
 help:
 	@echo "Mound Developer Commands:"
 	@echo "  make infra        - Start PostgreSQL (pgvector) and Redis containers"
 	@echo "  make infra-down   - Stop infrastructure containers"
-	@echo "  make dev          - Start backend in reload mode"
+	@echo "  make dev          - Start both backend and frontend concurrently"
+	@echo "  make dev-backend  - Start backend only in reload mode"
+	@echo "  make dev-frontend - Start frontend Next.js dev server"
 	@echo "  make lint         - Run ruff linter on backend"
 	@echo "  make test         - Run pytest test suite"
 	@echo "  make db-migrate   - Run Alembic migrations to latest head"
@@ -18,7 +20,13 @@ infra-down:
 	docker compose -f docker/docker-compose.yml down
 
 dev:
+	npm run dev
+
+dev-backend:
 	cd apps/backend && uv run uvicorn app.main:app --reload --port 8000
+
+dev-frontend:
+	npm --prefix apps/frontend run dev
 
 lint:
 	cd apps/backend && uv run ruff check .

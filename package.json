@@ -4,9 +4,14 @@
   "private": true,
   "description": "Mound - Crowdsourced AI Engineering Forge monorepo",
   "scripts": {
-    "dev": "npm --prefix apps/frontend run dev",
+    "dev": "concurrently -n \"backend,frontend\" -c \"blue,magenta\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd apps/backend && uv run uvicorn app.main:app --reload --port 8000",
+    "dev:frontend": "npm --prefix apps/frontend run dev",
     "build": "npm --prefix apps/frontend run build",
     "lint": "npm --prefix apps/frontend run lint",
     "start": "npm --prefix apps/frontend run start"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
   }
 }
