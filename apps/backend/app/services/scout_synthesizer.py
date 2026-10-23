@@ -37,6 +37,12 @@ DOMAIN_SIGNATURES: dict[str, list[str]] = {
         "api rate limit", "breaking schema", "webhook", "api gateway", "vendor lock-in",
         "provider outage", "token-bucket", "retry queue", "contract validation", "third-party api",
     ],
+    "AI_AGENT_ENGINEERING": [
+        "agent", "autonomous agent", "mcp", "model context protocol", "tool calling", "function calling",
+        "context window", "memory governance", "prompt drift", "eval", "rag", "vector search",
+        "hallucination", "local llm", "vllm", "quantization", "gguf", "synthetic data", "multi-agent",
+        "structured output", "fuzzing",
+    ],
 }
 
 # Bespoke domain specifications
@@ -215,6 +221,35 @@ DOMAIN_ARCHETYPES: dict[str, dict[str, Any]] = {
             "Does not maintain customer billing checkout flows or merchant payment processing accounts",
         ],
         "tags": ["api-gateway", "infrastructure", "rate-limiting", "reliability", "backend"],
+    },
+    "AI_AGENT_ENGINEERING": {
+        "pitch_template": "Autonomous agent governance harness preventing context pollution, tool hallucination, and loop exhaustion",
+        "persona": "AI engineers, LLM platform architects, and builders deploying multi-turn autonomous coding or workflow agents.",
+        "problem_template": (
+            "Production multi-turn agents and tool-calling LLMs suffer from severe failure modes including conversational memory pollution, "
+            "unhandled JSON function call parse failures, and infinite retry loops that blow through token budgets and context windows. "
+            "Existing agent frameworks lack deterministic state validation, circuit-breaker backpressure, and runtime prompt drift detection."
+        ),
+        "deliverables": [
+            "Schema-enforcing proxy intercepting agent tool executions with strict grammar-guided JSON validation and fallback recovery",
+            "Context window governor and memory reconciler pruning stale vector retrievals and duplicate tool observations",
+            "Autonomous evaluation and security fuzzing harness benchmarking hallucination rates and tool invocation safety",
+        ],
+        "acceptance": [
+            "Deterministic schema validator eliminates 100% of unparsed JSON tool calling crashes under fuzz testing",
+            "Context governor reduces prompt token consumption by at least 35% across multi-turn sessions without task degradation",
+            "Circuit breaker halts runaway tool loops within 3 iterations, falling back to a structured human-in-the-loop escalation event",
+        ],
+        "stack": SuggestedStack(
+            language="Python 3.12 or Rust (edition 2021)",
+            core_libraries=["fastapi", "pydantic-v2", "outlines", "instructor", "tokio"],
+            storage="PostgreSQL 16 with pgvector for memory embeddings and Redis for session state",
+        ),
+        "non_goals": [
+            "Does not train custom foundation model weights or replace commercial LLM providers",
+            "Does not execute untrusted shell commands outside isolated microVM sandboxes",
+        ],
+        "tags": ["ai-agents", "mcp", "evals", "llm-infrastructure", "memory-governance"],
     },
 }
 

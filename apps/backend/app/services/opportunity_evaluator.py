@@ -1,8 +1,8 @@
-"""The Billion-Dollar Opportunity Evaluator.
+"""The Innovation-First Project Opportunity Evaluator.
 
-Strictly scores raw online developer and business complaints against a rigorous
-venture-scale rubric to filter out trivial bugs, consumer apps, and minor scripts,
-passing only true multi-million and billion-dollar enterprise market opportunities.
+Scores raw developer, AI engineering, and tech community signals against an
+innovation-first rubric to filter out single-repo chores, localized bugs, and spam,
+highlighting high-leverage software project opportunities, autonomous agents, and devtools.
 """
 
 import re
@@ -29,7 +29,16 @@ TRIVIAL_BUG_PATTERNS = [
     r"\battributeerror\b",
 ]
 
-# Disqualifier 2: Consumer complaints, personal subscriptions, and mobile apps
+# Disqualifier 2: Single-repository maintenance chores, release readiness, and internal PR noise
+REPO_CHORE_PATTERNS = [
+    r"\b(release readiness|post-v\d+\.\d+|bump version|milestone closure|acceptance gates?)\b",
+    r"\b(re:\s*shape reconciliation|re:\s*perf\(|re:\s*compiler\(|re:\s*\[integrated)\b",
+    r"\b(flaky test:\s*\w+)\b",
+    r"\b(dual-account coordination|manifest d[aâ]y|manifest bi[eê]n|db rehearsal)\b",
+    r"\b(chuyển heroku sang|migration manifest)\b",
+]
+
+# Disqualifier 3: Consumer complaints, personal subscriptions, and mobile apps
 CONSUMER_AND_MOBILE_PATTERNS = [
     r"\b(iphone|ipad|ios app|android app|macos app)\b",
     r"\b(battery drain|dark mode|font size|screen brightness)\b",
@@ -39,77 +48,91 @@ CONSUMER_AND_MOBILE_PATTERNS = [
     r"\b(cancel my subscription|refund my 20 dollars)\b",
 ]
 
-# Disqualifier 3: Local dev ergonomics, single library quirks, and flame wars
+# Disqualifier 4: Framework flame wars, homework, or beginner tutorials
 LOCAL_DEV_AND_OPINION_PATTERNS = [
     r"\b(iframe support|cypress|vitest|jest mock|webpack config|eslint rule|prettier)\b",
-    r"\b(zsh autocomplete|vscode extension|sublime text|terminal font|theme)\b",
+    r"\b(zsh autocomplete|sublime text|terminal font|theme)\b",
     r"\b(why i hate|php in 20\d\d|is \w+ dead|should i learn \w+|switch from \w+ to \w+)\b",
     r"\b(tabs vs spaces|vim vs emacs|my first project|help with homework)\b",
     r"\b(beginner tutorial|learn coding|portfolio review)\b",
 ]
 
-# Disqualifier 4: Self-promotion, side projects, and landing page reviews
-SELF_PROMO_PATTERNS = [
-    r"\bshow hn:?\b",
-    r"\bi built a\b",
-    r"\bmy side project\b",
-    r"\bcheck out my\b",
-    r"\bfeedback on my (landing page|saas|project|app)\b",
-    r"\blaunched today\b",
+# Disqualifier 5: Pure promotional spam
+SPAM_PATTERNS = [
+    r"\b(crypto airdrop|join my telegram|roast my (landing page|website)|free crypto)\b",
+    r"\b(feedback on my landing page welcome)\b",
 ]
 
-# Positive indicators for enterprise infrastructure, FinOps, and multi-tenant bottlenecks
-ENTERPRISE_INFRA_INDICATORS = [
-    r"\b(kubernetes|k8s|aws|gcp|azure|terraform|cloud infrastructure)\b",
+# Innovation Category: AI & Autonomous Agent Leverage
+AI_AND_AGENT_INNOVATION_INDICATORS = [
+    r"\b(autonomous agent|multi-agent|agentic|agent loop|agent harness|tool use)\b",
+    r"\b(mcp|model context protocol|tool calling|function calling)\b",
+    r"\b(context window|context management|memory governance|long-term memory)\b",
+    r"\b(prompt drift|eval harness|synthetic data|evals? benchmark)\b",
+    r"\b(rag|vector search|embeddings|vector database|chunking|rerank)\b",
+    r"\b(local llm|local inference|vllm|ollama|llama\.cpp|quantization|gguf|moe)\b",
+    r"\b(hallucination|circuit breaker|token limit|token consumption)\b",
+    r"\b(structured output|json schema|grammar-guided)\b",
+]
+
+# Innovation Category: Standalone Software & Developer Tooling
+STANDALONE_PRODUCT_INDICATORS = [
+    r"\b(developer tool|devtool|cli|sdk|library|api gateway|middleware)\b",
+    r"\b(proxy|daemon|governor|orchestrator|workflow engine|pipeline)\b",
+    r"\b(self-hosted|privacy-first|open source alternative|dashboard)\b",
+    r"\b(micro-saas|saas|platform|extension|browser extension|vscode extension)\b",
+    r"\b(fuzzing|security scanner|vulnerability|monitoring|alerting)\b",
+    r"\b(automation|automated|orchestration|codegen|code generation)\b",
+    r"\b(kubernetes|k8s|aws|gcp|terraform|docker|cloud infrastructure)\b",
     r"\b(database cluster|postgres replication|connection pool|split-brain|failover)\b",
     r"\b(data pipeline|cdc|change data capture|kafka|clickhouse|schema drift)\b",
     r"\b(soc2|hipaa|pci-dss|compliance|audit|iam privilege|standing access)\b",
     r"\b(finops|cloud bill|egress cost|unallocated compute|spend leak|snowflake cost)\b",
-    r"\b(telemetry|cardinality|ebpf|distributed tracing|log retention)\b",
-    r"\b(api rate limit|breaking schema|webhook delivery failure)\b",
-    r"\b(multi-tenant|distributed deadlock|cascading outage|zero-downtime)\b",
 ]
 
-# Indicators of severe operational agony and financial bleeding
-SEVERE_AGONY_INDICATORS = [
-    r"\b(data loss|silent data corruption|unplanned downtime|production outage|outage)\b",
-    r"\b(thousands of dollars|six-figure|exploded by|wasted|cost runaway)\b",
-    r"\b(sla breach|failed audit|audit failure|compliance fine|compliance failure|compliance audit|p1 outage|cascading)\b",
-    r"\b(manual spreadsheet|spreadsheets|spreadsheet triage|drowning in manual|choking on|toil)\b",
-    r"\b(vendor lock-in|price increase|thundering herd|exhaustion|privilege creep|privilege drift|standing access)\b",
+# Indicators of high problem intensity and market friction
+PROBLEM_INTENSITY_INDICATORS = [
+    r"\b(wasting hours|wasted|manual toil|nightmare|frustrated|struggling|exhausted|drowning)\b",
+    r"\b(expensive|sick of paying|pricing is insane|cost runaway|bleeding|exploded|spend leak)\b",
+    r"\b(alternative to|no good tool|missing in open source|why does no tool)\b",
+    r"\b(unreliable|flaky|breaks constantly|silent corruption|hallucinating|hallucination)\b",
+    r"\b(production issue|bottleneck|latency|memory leak|exhaustion|cascading|deadlock)\b",
+    r"\b(compliance|audit|security leak|rce|vulnerability|data loss|outage|thundering herd)\b",
+    r"\b(sla breach|failed audit|compliance fine|p1 outage|cost exploded|cascading)\b",
+    r"\b(manual spreadsheet|spreadsheets|spreadsheet triage|drowning in manual|toil)\b",
+    r"\b(vendor lock-in|price increase|privilege creep|standing access)\b",
 ]
 
-# Indicators of commercial viability and high enterprise willingness to pay
-WILLINGNESS_TO_PAY_INDICATORS = [
-    r"\b(enterprise|procurement|approved budget|contract|annual budget)\b",
+# Indicators of commercial and adoption viability
+COMMERCIAL_VIABILITY_INDICATORS = [
+    r"\b(would pay|willing to pay|paying for|pricing|subscription|budget)\b",
+    r"\b(freelancers|agencies|founders|startups|engineering team|devs|platform team)\b",
+    r"\b(production|commercial|saas|api|monetization|revenue|enterprise)\b",
+    r"\b(self-hostable|team seats|billing|client sites|infrastructure team)\b",
     r"\b(datadog bill|snowflake cost|aws bill|cloud bill|invoice|spending \$)\b",
-    r"\b(ciso|compliance officer|infrastructure team|devops team|engineering org|platform team)\b",
-    r"\b(production cluster|multi-tenant|sla breach|thousands of dollars lost)\b",
+    r"\b(ciso|compliance officer|engineering org|approved budget|procurement)\b",
 ]
 
 
 class OpportunityEvaluator:
-    """Evaluates raw pain signals against the 4-dimensional Billion-Dollar Rubric."""
+    """Evaluates raw signals against the Innovation-First Project Rubric."""
 
-    MIN_PASSING_TOTAL = 75
-    MIN_DIMENSION_SCORE = 14
+    MIN_PASSING_TOTAL = 65
+    MIN_DIMENSION_SCORE = 12
 
     @classmethod
     def evaluate(cls, signal: RawPainSignal) -> OpportunityEvaluation:
-        """Determines whether a pain signal qualifies as a high-value engineering opportunity.
-
-        Args:
-            signal: The normalized RawPainSignal from Reddit, HN, or GitHub.
-
-        Returns:
-            An OpportunityEvaluation with dimension scores (0-25) and pass/reject status.
-        """
+        """Scores a pain signal to identify viable, innovative standalone software projects."""
         combined_text = f"{signal.title}\n{signal.content}".lower()
 
         # 1. Fast Disqualification Checks
         for pat in TRIVIAL_BUG_PATTERNS:
             if re.search(pat, combined_text):
                 return cls._disqualify(signal, "Local technical bug, compiler warning, or syntax error.")
+
+        for pat in REPO_CHORE_PATTERNS:
+            if re.search(pat, combined_text):
+                return cls._disqualify(signal, "Single-repository internal maintenance chore, release ticket, or PR discussion.")
 
         for pat in CONSUMER_AND_MOBILE_PATTERNS:
             if re.search(pat, combined_text):
@@ -119,57 +142,63 @@ class OpportunityEvaluator:
             if re.search(pat, combined_text):
                 return cls._disqualify(signal, "Local dev tooling quirk, framework opinion piece, or tutorial question.")
 
-        for pat in SELF_PROMO_PATTERNS:
+        for pat in SPAM_PATTERNS:
             if re.search(pat, combined_text):
-                return cls._disqualify(signal, "Self-promotion, side-project announcement, or landing page review.")
+                return cls._disqualify(signal, "Promotional spam, token airdrop, or landing page roasting.")
 
-        # 2. Score Dimension 1: TAM & Enterprise Market Breadth (0-25)
+        # 2. Dimension 1: TAM & Community Resonance (0-25)
         tam = 8
-        infra_hits = sum(1 for pat in ENTERPRISE_INFRA_INDICATORS if re.search(pat, combined_text))
-        tam += min(12, infra_hits * 4)
-        if signal.engagement_count >= 20:
+        ai_hits = sum(1 for pat in AI_AND_AGENT_INNOVATION_INDICATORS if re.search(pat, combined_text))
+        infra_hits = sum(1 for pat in STANDALONE_PRODUCT_INDICATORS if re.search(pat, combined_text))
+        tam += min(12, (ai_hits * 4) + (infra_hits * 3))
+
+        if signal.engagement_count >= 15:
             tam += 3
         if signal.engagement_count >= 50:
             tam += 2
         tam = max(0, min(25, tam))
 
-        # 3. Score Dimension 2: Urgency & Operational Agony (0-25)
+        # 3. Dimension 2: Urgency & Problem Intensity (0-25)
         urgency = 8
-        agony_hits = sum(1 for pat in SEVERE_AGONY_INDICATORS if re.search(pat, combined_text))
-        urgency += min(12, agony_hits * 4)
-        if len(signal.content) >= 200:
+        intensity_hits = sum(1 for pat in PROBLEM_INTENSITY_INDICATORS if re.search(pat, combined_text))
+        urgency += min(12, intensity_hits * 3)
+
+        if len(signal.content) >= 150:
             urgency += 3
-        if any(w in combined_text for w in ["catastrophic", "untenable", "nightmare", "choking", "broken", "bleeding"]):
+        if any(w in combined_text for w in ["nightmare", "wasting hours", "expensive", "broken", "frustrated", "struggling", "catastrophic", "wasted", "drowning", "exploded", "deadlock"]):
             urgency += 2
         urgency = max(0, min(25, urgency))
 
-        # 4. Score Dimension 3: Willingness to Pay & Commercial Viability (0-25)
+        # 4. Dimension 3: Commercial & Adoption Viability (0-25)
         wtp = 8
-        wtp_hits = sum(1 for pat in WILLINGNESS_TO_PAY_INDICATORS if re.search(pat, combined_text))
-        wtp += min(12, wtp_hits * 4)
-        if any(w in combined_text for w in ["enterprise", "production", "infrastructure", "devops", "finops", "compliance", "ciso"]):
+        commercial_hits = sum(1 for pat in COMMERCIAL_VIABILITY_INDICATORS if re.search(pat, combined_text))
+        wtp += min(12, commercial_hits * 3)
+
+        if any(w in combined_text for w in ["enterprise", "freelancers", "agencies", "startups", "devops", "platform team", "production"]):
             wtp += 3
-        if any(w in combined_text for w in ["engineering org", "platform team", "cluster", "multi-tenant"]):
+        if any(w in combined_text for w in ["pricing", "subscription", "paying", "billing", "bill", "invoice"]):
             wtp += 2
-        # Strict penalties for hobbyist / free seekers
-        if any(w in combined_text for w in ["free tier", "open source alternative for free", "too poor", "hobby"]):
-            wtp = max(0, wtp - 15)
         wtp = max(0, min(25, wtp))
 
-        # 5. Score Dimension 4: Technical Feasibility & Systemic Moat (0-25)
-        feasibility = 10
-        if any(w in combined_text for w in ["architecture", "proxy", "daemon", "gateway", "engine", "protocol", "stream", "pipeline", "ledger", "coordinator", "policy"]):
+        # 5. Dimension 4: Innovation & Standalone Product Solvability (0-25)
+        feasibility = 8
+        # Strong boost for modern AI/agent engineering paradigms
+        if ai_hits >= 1:
             feasibility += 8
-        if len(signal.content) >= 200:
-            feasibility += 4
-        if signal.engagement_count >= 10:
+        elif infra_hits >= 1:
+            feasibility += 5
+
+        # Standalone product architecture terminology
+        if any(w in combined_text for w in ["proxy", "daemon", "gateway", "engine", "protocol", "pipeline", "ledger", "coordinator", "governor", "harness", "scanner", "dashboard", "cli"]):
+            feasibility += 6
+        if len(signal.content) >= 150:
             feasibility += 3
         feasibility = max(0, min(25, feasibility))
 
         total = tam + urgency + wtp + feasibility
 
-        # Strict Multi-Dimensional Barrier
-        is_structural = (
+        # Multi-Dimensional Project Qualification Barrier
+        is_viable_project = (
             total >= cls.MIN_PASSING_TOTAL
             and tam >= cls.MIN_DIMENSION_SCORE
             and urgency >= cls.MIN_DIMENSION_SCORE
@@ -180,36 +209,36 @@ class OpportunityEvaluator:
         rejection = None
         suggested_pitch = None
 
-        if not is_structural:
+        if not is_viable_project:
             failed_dims = []
             if tam < cls.MIN_DIMENSION_SCORE:
-                failed_dims.append(f"TAM ({tam}/25 < {cls.MIN_DIMENSION_SCORE})")
+                failed_dims.append(f"TAM/Resonance ({tam}/25 < {cls.MIN_DIMENSION_SCORE})")
             if urgency < cls.MIN_DIMENSION_SCORE:
-                failed_dims.append(f"Urgency ({urgency}/25 < {cls.MIN_DIMENSION_SCORE})")
+                failed_dims.append(f"Urgency/Pain ({urgency}/25 < {cls.MIN_DIMENSION_SCORE})")
             if wtp < cls.MIN_DIMENSION_SCORE:
-                failed_dims.append(f"WTP ({wtp}/25 < {cls.MIN_DIMENSION_SCORE})")
+                failed_dims.append(f"Commercial Viability ({wtp}/25 < {cls.MIN_DIMENSION_SCORE})")
             if feasibility < cls.MIN_DIMENSION_SCORE:
-                failed_dims.append(f"Feasibility ({feasibility}/25 < {cls.MIN_DIMENSION_SCORE})")
+                failed_dims.append(f"Innovation/Solvability ({feasibility}/25 < {cls.MIN_DIMENSION_SCORE})")
 
             fail_summary = ", ".join(failed_dims) if failed_dims else f"Total score ({total}/100 < {cls.MIN_PASSING_TOTAL})"
-            rejection = f"Failed Billion-Dollar Rubric: {fail_summary}. Does not represent a venture-scale market opportunity."
+            rejection = f"Failed Innovation Rubric: {fail_summary}. Insufficient standalone project leverage."
         else:
             clean_title = re.sub(r"[^\w\s-]", "", signal.title).strip()
             if len(clean_title) > 75:
                 clean_title = clean_title[:72] + "..."
-            suggested_pitch = f"High-throughput enterprise infrastructure platform addressing {clean_title} in production"
+            suggested_pitch = f"Autonomous developer platform addressing {clean_title}"
 
         return OpportunityEvaluation(
             signal_id=signal.id,
-            is_structural_problem=is_structural,
+            is_structural_problem=is_viable_project,
             tam_score=tam,
             urgency_score=urgency,
             willingness_to_pay_score=wtp,
             feasibility_score=feasibility,
             total_score=total,
             rationale=(
-                f"Evaluated on TAM ({tam}/25), Urgency ({urgency}/25), WTP ({wtp}/25), and Feasibility ({feasibility}/25). "
-                f"Total score: {total}/100. Structural qualification: {is_structural}."
+                f"Evaluated on TAM ({tam}/25), Urgency ({urgency}/25), Commercial ({wtp}/25), and Innovation/Solvability ({feasibility}/25). "
+                f"Total score: {total}/100. Project qualification: {is_viable_project}."
             ),
             suggested_pitch=suggested_pitch,
             rejection_reason=rejection,
