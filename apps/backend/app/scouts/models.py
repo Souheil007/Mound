@@ -67,7 +67,7 @@ class OpportunityEvaluation(BaseModel):
         ...,
         ge=0,
         le=100,
-        description="Cumulative score (sum of all 4 dimensions). Must be >= 80 to qualify.",
+        description="Cumulative score (sum of all 4 dimensions). Must be >= 65 to qualify for synthesis.",
     )
     rationale: str = Field(
         ...,
