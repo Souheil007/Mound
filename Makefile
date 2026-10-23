@@ -23,7 +23,7 @@ dev:
 	npm run dev
 
 dev-backend:
-	cd apps/backend && uv run uvicorn app.main:app --reload --port 8000
+	cd apps/backend && uv run python -m uvicorn app.main:app --reload --port 8000
 
 dev-frontend:
 	npm --prefix apps/frontend run dev
