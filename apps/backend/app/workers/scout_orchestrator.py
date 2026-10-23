@@ -85,18 +85,18 @@ class ScoutOrchestrator:
 
     def __init__(self):
         self.hn_scout = HNScout()
-        self.reddit_scout = RedditScout()
+        self.reddit_scout = RedditScout(filter_by_keywords=False)
         self.github_scout = GitHubScout()
 
     async def run_scout_cycle(
         self,
-        window_hours: int = 2,
+        window_hours: int = 72,
         platform: PlatformSource | None = None,
     ) -> dict[str, Any]:
         """Executes a platform crawl, scoring, and publication pass.
 
         Args:
-            window_hours: Maximum age of content in hours (default 2 hours for 2h cron cycle).
+            window_hours: Maximum age of content in hours (default 72 hours).
             platform: Optional specific platform to target (runs all if None).
 
         Returns:
@@ -114,7 +114,7 @@ class ScoutOrchestrator:
         if not platform or platform == PlatformSource.HACKERNEWS:
             tasks.append(self.hn_scout.fetch_signals(limit_per_query=5, window_hours=window_hours))
         if not platform or platform == PlatformSource.REDDIT:
-            tasks.append(self.reddit_scout.fetch_signals(limit_per_sub=10, window_hours=window_hours))
+            tasks.append(self.reddit_scout.fetch_signals(window_hours=window_hours))
         if not platform or platform == PlatformSource.GITHUB:
             tasks.append(self.github_scout.fetch_signals(limit_per_query=5, window_hours=window_hours))
 
@@ -130,9 +130,17 @@ class ScoutOrchestrator:
 
         qualified_evaluations: list[tuple[RawPainSignal, Any]] = []
 
-        # 2. Evaluate through the Billion-Dollar Rubric
-        for signal in raw_signals:
-            eval_res = OpportunityEvaluator.evaluate(signal)
+        # 2. Evaluate through the 2-Tier Architecture (Tier 1 Heuristics + Tier 2 Mistral / Semantic)
+        sem = asyncio.Semaphore(4)
+
+        async def eval_signal(signal: RawPainSignal):
+            async with sem:
+                eval_res = await OpportunityEvaluator.evaluate_async(signal)
+                return (signal, eval_res)
+
+        evaluations = await asyncio.gather(*(eval_signal(s) for s in raw_signals))
+
+        for signal, eval_res in evaluations:
             if eval_res.is_structural_problem and eval_res.total_score >= OpportunityEvaluator.MIN_PASSING_TOTAL:
                 qualified_evaluations.append((signal, eval_res))
                 logger.info(
@@ -148,6 +156,9 @@ class ScoutOrchestrator:
                     signal.title[:60],
                     eval_res.rejection_reason,
                 )
+
+        # Sort so highest-scoring innovative opportunities are prioritized
+        qualified_evaluations.sort(key=lambda x: x[1].total_score, reverse=True)
 
         published_blueprints: list[dict[str, Any]] = []
 

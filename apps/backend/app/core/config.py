@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     reddit_target_subreddits: list[str] | None = None
 
     # Tier-2 LLM Evaluator
-    llm_provider: str = "gemini"  # "gemini", "mistral", "openai", "anthropic", "ollama", or "semantic_embedding"
+    llm_provider: str = "mistral"  # "mistral", "gemini", "openai", "anthropic", "ollama", or "semantic_embedding"
     gemini_api_key: str | None = None
     mistral_api_key: str | None = None
     mistral_model: str = "open-mistral-7b"

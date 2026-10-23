@@ -94,7 +94,7 @@ class LLMEvaluator:
             ("anthropic", anthropic_key),
         ]
         for name, key in providers_to_try:
-            if not key:
+            if not key or name == provider:
                 continue
             try:
                 if name == "mistral":
@@ -137,7 +137,7 @@ class LLMEvaluator:
             wtp = min(25, wtp + 2)
 
         total = tam + urgency + wtp + feasibility
-        is_viable = total >= 65 and tam >= 12 and urgency >= 12 and wtp >= 12 and feasibility >= 12
+        is_viable = total >= 80 and tam >= 12 and urgency >= 12 and wtp >= 12 and feasibility >= 12
 
         clean_title = re.sub(r"[^\w\s-]", "", signal.title).strip()
         if len(clean_title) > 75:
@@ -278,7 +278,7 @@ Look for:
 Title: {signal.title}
 Platform: {signal.platform.value}
 Content:
-{signal.content[:1000]}
+{signal.content[:4000]}
 
 Reply strictly with a JSON object with these exact keys:
 {{
@@ -300,10 +300,28 @@ Reply strictly with a JSON object with these exact keys:
         feasibility = max(0, min(25, int(data.get("feasibility_score", 10))))
         total = tam + urgency + wtp + feasibility
 
-        is_viable = bool(data.get("is_viable_project", total >= 65))
+        is_viable = bool(data.get("is_viable_project", total >= 80))
+
         pitch = data.get("suggested_pitch")
-        rationale = f"Tier-2 LLM ({engine_name}): {data.get('rationale', 'Evaluated via LLM reasoning.')}"
+        if isinstance(pitch, dict):
+            pitch = " ".join(str(v) for v in pitch.values())
+        elif isinstance(pitch, list):
+            pitch = " ".join(str(v) for v in pitch)
+        elif pitch is not None:
+            pitch = str(pitch)
+
         rejection = data.get("rejection_reason")
+        if isinstance(rejection, dict):
+            rejection = " ".join(str(v) for v in rejection.values())
+        elif isinstance(rejection, list):
+            rejection = " ".join(str(v) for v in rejection)
+        elif rejection is not None:
+            rejection = str(rejection)
+
+        raw_rationale = data.get("rationale", "Evaluated via LLM reasoning.")
+        if isinstance(raw_rationale, (dict, list)):
+            raw_rationale = json.dumps(raw_rationale)
+        rationale = f"Tier-2 LLM ({engine_name}): {raw_rationale}"
 
         return OpportunityEvaluation(
             signal_id=signal.id,

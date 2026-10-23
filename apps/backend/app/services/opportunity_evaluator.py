@@ -75,7 +75,7 @@ class OpportunityEvaluator:
     Tier 2 (Semantic / LLM Evaluation): Evaluates valid candidates via 384-dim dense vectors or LLM reasoning.
     """
 
-    MIN_PASSING_TOTAL = 65
+    MIN_PASSING_TOTAL = 80
     MIN_DIMENSION_SCORE = 12
 
     @classmethod
