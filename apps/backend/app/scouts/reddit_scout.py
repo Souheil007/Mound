@@ -16,15 +16,27 @@ from app.scouts.models import PlatformSource, RawPainSignal
 logger = logging.getLogger(__name__)
 
 TARGET_SUBREDDITS = [
+    # AI Engineering & Autonomous Agents (Core Mound Focus)
+    "LocalLLaMA",
+    "OpenAI",
+    "ClaudeAI",
+    "PromptEngineering",
+    "MachineLearning",
+    # Builders, MicroSaaS & Tool Fatigue (Commercial Pain & Market Gaps)
+    "selfhosted",
+    "microSaaS",
+    "SideProject",
+    # Engineering Reality & Production Agony
+    "ExperiencedDevs",
+    "dataengineering",
+    # Commercial SaaS & Infrastructure
     "SaaS",
     "devops",
-    "sysadmin",
-    "startups",
-    "webdev",
 ]
 
 # Keywords indicating commercial pain or willingness to pay
 PAIN_KEYWORDS = [
+    # Commercial & tooling pain
     "expensive",
     "alternative",
     "manual",
@@ -39,6 +51,26 @@ PAIN_KEYWORDS = [
     "soc2",
     "hipaa",
     "database",
+    # AI & Agent engineering struggles
+    "context window",
+    "rate limit",
+    "hallucination",
+    "agent loop",
+    "token cost",
+    "vector search",
+    "unreliable",
+    "prompt drift",
+    "benchmark",
+    "function call",
+    "tool calling",
+    "latency",
+    "rag",
+    "eval",
+    "mcp",
+    "fine-tuning",
+    "gpu memory",
+    "vram",
+    "quantization",
 ]
 
 
@@ -62,10 +94,16 @@ class RedditScout:
         client_id: str | None = None,
         client_secret: str | None = None,
         timeout_seconds: float = 10.0,
+        target_subreddits: list[str] | None = None,
     ):
         self.client_id = client_id or getattr(settings, "reddit_client_id", None) or os.getenv("REDDIT_CLIENT_ID")
         self.client_secret = client_secret or getattr(settings, "reddit_client_secret", None) or os.getenv("REDDIT_CLIENT_SECRET")
         self.timeout_seconds = timeout_seconds
+        self.target_subreddits = (
+            target_subreddits
+            or getattr(settings, "reddit_target_subreddits", None)
+            or TARGET_SUBREDDITS
+        )
 
         # Descriptive RFC-compliant User-Agent complying with Reddit's public API policy
         self.user_agent = "web:mound.forge:v1.0.0 (by /u/souheil007; opportunity-detector)"
@@ -148,7 +186,7 @@ class RedditScout:
         }
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=auth_headers, follow_redirects=True) as client:
-            for sub in TARGET_SUBREDDITS:
+            for sub in self.target_subreddits:
                 url = f"https://oauth.reddit.com/r/{sub}/new?limit={limit_per_sub}"
                 try:
                     resp = await client.get(url)
@@ -212,7 +250,7 @@ class RedditScout:
         cutoff_utc = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).timestamp()
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers, follow_redirects=True) as client:
-            for i, sub in enumerate(TARGET_SUBREDDITS):
+            for i, sub in enumerate(self.target_subreddits):
                 # Apply sequential pacing between subreddits
                 if i > 0:
                     await asyncio.sleep(1.2)
@@ -284,6 +322,20 @@ class RedditScout:
     def _get_resilient_seed_signals(self) -> list[RawPainSignal]:
         """Provides realistic production-grade developer pain signals when Reddit unauthenticated IP is throttled."""
         return [
+            RawPainSignal(
+                id="reddit_seed_localllama_01",
+                platform=PlatformSource.REDDIT,
+                title="Agent tool loops burning through token limits and crashing on unparsed JSON function calls",
+                content=(
+                    "Building multi-turn coding agents using open models on vLLM. Whenever our agent hits a tool execution error, "
+                    "it hallucinates function arguments and enters an infinite retry loop, blowing up our context window and GPU memory. "
+                    "We need a robust schema-enforcing agent harness with circuit breakers and fallback prompt strategies."
+                ),
+                author="ai_eng_builder",
+                url="https://reddit.com/r/LocalLLaMA/comments/agent_tool_loop_exhaustion",
+                engagement_count=142,
+                metadata={"subreddit": "LocalLLaMA", "source": "resilient_fallback", "upvotes": 105, "comments": 37},
+            ),
             RawPainSignal(
                 id="reddit_seed_finops_01",
                 platform=PlatformSource.REDDIT,

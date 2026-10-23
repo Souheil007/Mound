@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     github_token: str | None = None
     reddit_client_id: str | None = None
     reddit_client_secret: str | None = None
+    reddit_target_subreddits: list[str] | None = None
 
 
 settings = Settings()
