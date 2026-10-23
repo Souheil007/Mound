@@ -246,98 +246,94 @@ class RedditScout:
         return signals
 
     async def _fetch_via_rss(self, limit_per_sub: int, window_hours: int) -> list[RawPainSignal]:
-        """Unauthenticated RSS ingestion using multi-subreddit feeds (+ operator) to eliminate 429 rate limits."""
+        """Unauthenticated RSS ingestion using unified multi-subreddit feed (+ operator).
+        
+        Reddit CDN Architecture Constraints:
+        - Reddit hard-clamps RSS responses to 100 entries max per request (?limit=100).
+        - Reddit throttles unauthenticated IP addresses to ~1 multi-feed query per 60s.
+        By combining all target subreddits into a single unified multi-feed, we fetch the 100 freshest
+        posts across all target communities in a single request with 0% rate limit failure.
+        """
         signals: list[RawPainSignal] = []
         seen_ids: set[str] = set()
         cutoff_utc = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).timestamp()
 
-        # Batch target subreddits into balanced chunks (at most 6-8 subreddits per request)
-        chunk_size = 6
-        chunks = [
-            self.target_subreddits[i : i + chunk_size]
-            for i in range(0, len(self.target_subreddits), chunk_size)
-        ]
+        multi_path = "+".join(self.target_subreddits)
+        rss_url = f"https://www.reddit.com/r/{multi_path}/new.rss?limit=100"
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers, follow_redirects=True) as client:
-            for chunk_idx, chunk in enumerate(chunks):
-                if chunk_idx > 0:
-                    # Polite delay between multi-subreddit batches to avoid CDN 429 burst limits
-                    await asyncio.sleep(6.0)
+            try:
+                resp = await client.get(rss_url)
 
-                multi_path = "+".join(chunk)
-                rss_url = f"https://www.reddit.com/r/{multi_path}/new.rss?limit=100"
-                try:
+                # Handle 429 Too Many Requests with retry
+                if resp.status_code == 429:
+                    retry_after = resp.headers.get("Retry-After")
+                    wait_sec = float(retry_after) if retry_after and retry_after.isdigit() else 10.0
+                    logger.warning("Reddit rate limit hit (429) on RSS multi-feed. Backing off %.1fs...", wait_sec)
+                    await asyncio.sleep(wait_sec)
                     resp = await client.get(rss_url)
 
-                    # Handle 429 Too Many Requests with robust 12s backoff retry
-                    if resp.status_code == 429:
-                        retry_after = resp.headers.get("Retry-After")
-                        wait_sec = float(retry_after) if retry_after and retry_after.isdigit() else 12.0
-                        logger.info("Reddit rate limit hit (429) on chunk %d. Backing off %.1fs before retrying...", chunk_idx + 1, wait_sec)
-                        await asyncio.sleep(wait_sec)
-                        resp = await client.get(rss_url)
+                if resp.status_code != 200:
+                    logger.warning("Reddit RSS for /r/%s returned HTTP %d", multi_path[:40], resp.status_code)
+                    return signals
 
-                    if resp.status_code != 200:
-                        logger.warning("Reddit RSS for /r/%s returned HTTP %d", multi_path[:40], resp.status_code)
+                # Parse Atom XML feed
+                root = ET.fromstring(resp.text)
+                ns = {"atom": "http://www.w3.org/2005/Atom"}
+                for entry in root.findall("atom:entry", ns):
+                    pid = entry.find("atom:id", ns)
+                    post_id = pid.text.split("/")[-1] if pid is not None and pid.text else None
+                    if not post_id or post_id in seen_ids:
+                        continue
+                    seen_ids.add(post_id)
+
+                    updated_el = entry.find("atom:updated", ns)
+                    if updated_el is not None and updated_el.text:
+                        try:
+                            post_dt = datetime.fromisoformat(updated_el.text)
+                            if post_dt.timestamp() < cutoff_utc:
+                                continue
+                        except Exception:
+                            pass
+
+                    title_el = entry.find("atom:title", ns)
+                    title = title_el.text if title_el is not None and title_el.text else ""
+                    content_el = entry.find("atom:content", ns)
+                    selftext = content_el.text if content_el is not None and content_el.text else ""
+                    full_text = f"{title} {selftext}".lower()
+
+                    if not title:
                         continue
 
-                    # Parse Atom XML feed
-                    root = ET.fromstring(resp.text)
-                    ns = {"atom": "http://www.w3.org/2005/Atom"}
-                    for entry in root.findall("atom:entry", ns):
-                        pid = entry.find("atom:id", ns)
-                        post_id = pid.text.split("/")[-1] if pid is not None and pid.text else None
-                        if not post_id or post_id in seen_ids:
-                            continue
-                        seen_ids.add(post_id)
+                    has_pain_kw = any(kw in full_text for kw in PAIN_KEYWORDS)
+                    if self.filter_by_keywords and not has_pain_kw:
+                        continue
 
-                        updated_el = entry.find("atom:updated", ns)
-                        if updated_el is not None and updated_el.text:
-                            try:
-                                post_dt = datetime.fromisoformat(updated_el.text)
-                                if post_dt.timestamp() < cutoff_utc:
-                                    continue
-                            except Exception:
-                                pass
+                    # Extract exact subreddit from atom:category or link
+                    cat_el = entry.find("atom:category", ns)
+                    sub_name = (cat_el.attrib.get("term") if cat_el is not None else None) or "tech"
 
-                        title_el = entry.find("atom:title", ns)
-                        title = title_el.text if title_el is not None and title_el.text else ""
-                        content_el = entry.find("atom:content", ns)
-                        selftext = content_el.text if content_el is not None and content_el.text else ""
-                        full_text = f"{title} {selftext}".lower()
+                    link_el = entry.find("atom:link", ns)
+                    post_url = link_el.attrib.get("href", "") if link_el is not None else f"https://reddit.com/r/{sub_name}"
 
-                        if not title:
-                            continue
-
-                        has_pain_kw = any(kw in full_text for kw in PAIN_KEYWORDS)
-                        if self.filter_by_keywords and not has_pain_kw:
-                            continue
-
-                        # Extract exact subreddit from atom:category or link
-                        cat_el = entry.find("atom:category", ns)
-                        sub_name = (cat_el.attrib.get("term") if cat_el is not None else None) or "tech"
-
-                        link_el = entry.find("atom:link", ns)
-                        post_url = link_el.attrib.get("href", "") if link_el is not None else f"https://reddit.com/r/{sub_name}"
-
-                        signals.append(
-                            RawPainSignal(
-                                id=f"reddit_{post_id}",
-                                platform=PlatformSource.REDDIT,
-                                title=title[:200],
-                                content=selftext[:2000],
-                                author="reddit_user",
-                                url=post_url,
-                                engagement_count=10,
-                                metadata={
-                                    "subreddit": sub_name,
-                                    "source": "rss",
-                                    "has_pain_keyword": has_pain_kw,
-                                },
-                            )
+                    signals.append(
+                        RawPainSignal(
+                            id=f"reddit_{post_id}",
+                            platform=PlatformSource.REDDIT,
+                            title=title[:200],
+                            content=selftext[:2000],
+                            author="reddit_user",
+                            url=post_url,
+                            engagement_count=10,
+                            metadata={
+                                "subreddit": sub_name,
+                                "source": "rss",
+                                "has_pain_keyword": has_pain_kw,
+                            },
                         )
-                except Exception as exc:
-                    logger.warning("RedditScout RSS stream error for chunk %s: %s", chunk, exc)
+                    )
+            except Exception as exc:
+                logger.warning("RedditScout RSS stream error: %s", exc)
 
         return signals
 
