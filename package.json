@@ -7,6 +7,9 @@
     "dev": "concurrently -n \"backend,frontend\" -c \"blue,magenta\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd apps/backend && uv run python -m uvicorn app.main:app --reload --port 8000",
     "dev:frontend": "npm --prefix apps/frontend run dev",
+    "infra": "docker compose -f docker/docker-compose.yml up -d",
+    "infra:down": "docker compose -f docker/docker-compose.yml down",
+    "db:migrate": "cd apps/backend && uv run alembic upgrade head",
     "build": "npm --prefix apps/frontend run build",
     "lint": "npm --prefix apps/frontend run lint",
     "start": "npm --prefix apps/frontend run start"
