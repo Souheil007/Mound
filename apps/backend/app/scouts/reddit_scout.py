@@ -251,8 +251,8 @@ class RedditScout:
         seen_ids: set[str] = set()
         cutoff_utc = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).timestamp()
 
-        # Batch target subreddits into multi-reddit chunks (at most 10 subreddits per request)
-        chunk_size = 10
+        # Batch target subreddits into balanced chunks (at most 6-8 subreddits per request)
+        chunk_size = 6
         chunks = [
             self.target_subreddits[i : i + chunk_size]
             for i in range(0, len(self.target_subreddits), chunk_size)
@@ -261,18 +261,19 @@ class RedditScout:
         async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers, follow_redirects=True) as client:
             for chunk_idx, chunk in enumerate(chunks):
                 if chunk_idx > 0:
-                    await asyncio.sleep(2.0)
+                    # Polite delay between multi-subreddit batches to avoid CDN 429 burst limits
+                    await asyncio.sleep(6.0)
 
                 multi_path = "+".join(chunk)
                 rss_url = f"https://www.reddit.com/r/{multi_path}/new.rss?limit=100"
                 try:
                     resp = await client.get(rss_url)
 
-                    # Handle 429 Too Many Requests with retry
+                    # Handle 429 Too Many Requests with robust 12s backoff retry
                     if resp.status_code == 429:
                         retry_after = resp.headers.get("Retry-After")
-                        wait_sec = min(float(retry_after), 5.0) if retry_after and retry_after.isdigit() else 3.0
-                        logger.debug("Reddit rate limit hit (429) on multi-feed. Backing off %.1fs...", wait_sec)
+                        wait_sec = float(retry_after) if retry_after and retry_after.isdigit() else 12.0
+                        logger.info("Reddit rate limit hit (429) on chunk %d. Backing off %.1fs before retrying...", chunk_idx + 1, wait_sec)
                         await asyncio.sleep(wait_sec)
                         resp = await client.get(rss_url)
 
