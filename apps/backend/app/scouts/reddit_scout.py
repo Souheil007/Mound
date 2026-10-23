@@ -244,31 +244,38 @@ class RedditScout:
         return signals
 
     async def _fetch_via_rss(self, limit_per_sub: int, window_hours: int) -> list[RawPainSignal]:
-        """Unauthenticated RSS ingestion directly bypassing .json 403 CDN blocks with 1.2s polite delay."""
+        """Unauthenticated RSS ingestion using multi-subreddit feeds (+ operator) to eliminate 429 rate limits."""
         signals: list[RawPainSignal] = []
         seen_ids: set[str] = set()
         cutoff_utc = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).timestamp()
 
-        async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers, follow_redirects=True) as client:
-            for i, sub in enumerate(self.target_subreddits):
-                # Apply sequential pacing between subreddits
-                if i > 0:
-                    await asyncio.sleep(1.2)
+        # Batch target subreddits into multi-reddit chunks (at most 10 subreddits per request)
+        chunk_size = 10
+        chunks = [
+            self.target_subreddits[i : i + chunk_size]
+            for i in range(0, len(self.target_subreddits), chunk_size)
+        ]
 
-                rss_url = f"https://www.reddit.com/r/{sub}/new.rss"
+        async with httpx.AsyncClient(timeout=self.timeout_seconds, headers=self.headers, follow_redirects=True) as client:
+            for chunk_idx, chunk in enumerate(chunks):
+                if chunk_idx > 0:
+                    await asyncio.sleep(2.0)
+
+                multi_path = "+".join(chunk)
+                rss_url = f"https://www.reddit.com/r/{multi_path}/new.rss?limit=100"
                 try:
                     resp = await client.get(rss_url)
 
                     # Handle 429 Too Many Requests with retry
                     if resp.status_code == 429:
                         retry_after = resp.headers.get("Retry-After")
-                        wait_sec = min(float(retry_after), 5.0) if retry_after and retry_after.isdigit() else 2.5
-                        logger.debug("Reddit rate limit hit (429) on r/%s. Backing off %.1fs...", sub, wait_sec)
+                        wait_sec = min(float(retry_after), 5.0) if retry_after and retry_after.isdigit() else 3.0
+                        logger.debug("Reddit rate limit hit (429) on multi-feed. Backing off %.1fs...", wait_sec)
                         await asyncio.sleep(wait_sec)
                         resp = await client.get(rss_url)
 
                     if resp.status_code != 200:
-                        logger.debug("Reddit RSS for r/%s returned status %d. Skipping.", sub, resp.status_code)
+                        logger.warning("Reddit RSS for /r/%s returned HTTP %d", multi_path[:40], resp.status_code)
                         continue
 
                     # Parse Atom XML feed
@@ -299,8 +306,12 @@ class RedditScout:
                         if not any(kw in full_text for kw in PAIN_KEYWORDS):
                             continue
 
+                        # Extract exact subreddit from atom:category or link
+                        cat_el = entry.find("atom:category", ns)
+                        sub_name = (cat_el.attrib.get("term") if cat_el is not None else None) or "tech"
+
                         link_el = entry.find("atom:link", ns)
-                        post_url = link_el.attrib.get("href", "") if link_el is not None else f"https://reddit.com/r/{sub}"
+                        post_url = link_el.attrib.get("href", "") if link_el is not None else f"https://reddit.com/r/{sub_name}"
 
                         signals.append(
                             RawPainSignal(
@@ -311,11 +322,11 @@ class RedditScout:
                                 author="reddit_user",
                                 url=post_url,
                                 engagement_count=10,
-                                metadata={"subreddit": sub, "source": "rss"},
+                                metadata={"subreddit": sub_name, "source": "rss"},
                             )
                         )
                 except Exception as exc:
-                    logger.debug("RedditScout RSS stream error for r/%s: %s", sub, exc)
+                    logger.warning("RedditScout RSS stream error for chunk %s: %s", chunk, exc)
 
         return signals
 
