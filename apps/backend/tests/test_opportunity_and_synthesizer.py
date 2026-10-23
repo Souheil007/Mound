@@ -153,3 +153,63 @@ async def test_synthesized_spec_passes_strict_linter():
     lint_res = await SpecLinter.lint(spec, skip_url_verification=True)
     assert lint_res.passed
     assert len(lint_res.errors) == 0
+
+
+@pytest.mark.asyncio
+async def test_mistral_llm_evaluator_with_open_mistral_7b(monkeypatch):
+    """Verifies Mistral LLM evaluation with model open-mistral-7b."""
+    from unittest.mock import AsyncMock, MagicMock
+    from app.services.llm_evaluator import LLMEvaluator
+    from app.core.config import settings
+    import httpx
+
+    signal = RawPainSignal(
+        id="mistral_test_signal",
+        platform=PlatformSource.HACKERNEWS,
+        title="OpenShell – A safe, private runtime for fleets of autonomous AI agents",
+        content="Autonomous agents require sandboxed isolation harnesses and tool permissions.",
+        author="agent_dev",
+        url="https://news.ycombinator.com/item?id=50204791",
+        engagement_count=42,
+    )
+
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": (
+                        '{"is_viable_project": true, "tam_score": 24, "urgency_score": 23, '
+                        '"willingness_to_pay_score": 22, "feasibility_score": 23, '
+                        '"suggested_pitch": "Sandboxed runtime for autonomous AI agents", '
+                        '"rationale": "High-leverage enterprise agent infrastructure.", '
+                        '"rejection_reason": null}'
+                    )
+                }
+            }
+        ]
+    }
+
+    async def mock_post(self, url, **kwargs):
+        assert url == "https://api.mistral.ai/v1/chat/completions"
+        assert kwargs["json"]["model"] == "open-mistral-7b"
+        assert kwargs["headers"]["Authorization"] == "Bearer mock_mistral_key"
+        return mock_response
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
+    monkeypatch.setattr(settings, "llm_provider", "mistral")
+    monkeypatch.setattr(settings, "mistral_api_key", "mock_mistral_key")
+    monkeypatch.setattr(settings, "mistral_model", "open-mistral-7b")
+
+    eval_result = await LLMEvaluator.evaluate_candidate(signal)
+
+    assert eval_result.is_structural_problem is True
+    assert eval_result.total_score == 92
+    assert eval_result.tam_score == 24
+    assert eval_result.urgency_score == 23
+    assert eval_result.willingness_to_pay_score == 22
+    assert eval_result.feasibility_score == 23
+    assert "Mistral" in eval_result.rationale
+    assert eval_result.suggested_pitch == "Sandboxed runtime for autonomous AI agents"
+

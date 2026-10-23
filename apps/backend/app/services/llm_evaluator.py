@@ -1,7 +1,7 @@
 """Tier-2 Intelligent Opportunity Evaluator.
 
 Provides semantic LLM-driven evaluation for candidate signals that pass the Tier-1 filter.
-Supports Google Gemini, OpenAI, Anthropic, local Ollama, and local ONNX vector semantic embeddings.
+Supports Google Gemini, Mistral AI, OpenAI, Anthropic, local Ollama, and local ONNX vector semantic embeddings.
 """
 
 import json
@@ -54,30 +54,61 @@ class LLMEvaluator:
     @classmethod
     async def evaluate_candidate(cls, signal: RawPainSignal) -> OpportunityEvaluation:
         """Performs Tier-2 evaluation on a candidate signal via LLM or dense semantic vector analysis."""
-        # 1. External LLM Provider Checks
-        gemini_key = settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
-        openai_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
-        anthropic_key = settings.anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
+        provider = (getattr(settings, "llm_provider", "") or "").lower()
+        mistral_key = getattr(settings, "mistral_api_key", None) or os.getenv("MISTRAL_API_KEY")
+        gemini_key = getattr(settings, "gemini_api_key", None) or os.getenv("GEMINI_API_KEY")
+        openai_key = getattr(settings, "openai_api_key", None) or os.getenv("OPENAI_API_KEY")
+        anthropic_key = getattr(settings, "anthropic_api_key", None) or os.getenv("ANTHROPIC_API_KEY")
+        mistral_model = getattr(settings, "mistral_model", "open-mistral-7b")
 
-        if gemini_key:
+        # 1. Prioritize explicitly selected provider
+        if provider == "mistral" and mistral_key:
+            try:
+                return await cls._evaluate_mistral(signal, mistral_key, mistral_model)
+            except Exception as exc:
+                logger.warning("Tier-2 Mistral evaluation failed, falling back: %s", exc)
+
+        if provider == "gemini" and gemini_key:
             try:
                 return await cls._evaluate_gemini(signal, gemini_key)
             except Exception as exc:
-                logger.warning("Tier-2 Gemini evaluation failed, falling back to local semantics: %s", exc)
+                logger.warning("Tier-2 Gemini evaluation failed, falling back: %s", exc)
 
-        if openai_key:
+        if provider == "openai" and openai_key:
             try:
                 return await cls._evaluate_openai(signal, openai_key)
             except Exception as exc:
-                logger.warning("Tier-2 OpenAI evaluation failed, falling back to local semantics: %s", exc)
+                logger.warning("Tier-2 OpenAI evaluation failed, falling back: %s", exc)
 
-        if anthropic_key:
+        if provider == "anthropic" and anthropic_key:
             try:
                 return await cls._evaluate_anthropic(signal, anthropic_key)
             except Exception as exc:
-                logger.warning("Tier-2 Anthropic evaluation failed, falling back to local semantics: %s", exc)
+                logger.warning("Tier-2 Anthropic evaluation failed, falling back: %s", exc)
 
-        # 2. Local Dense Vector Semantic Evaluation (Zero Cost, No API Key, ONNX Runtime)
+        # 2. Cascade through any other configured API keys
+        providers_to_try = [
+            ("mistral", mistral_key),
+            ("gemini", gemini_key),
+            ("openai", openai_key),
+            ("anthropic", anthropic_key),
+        ]
+        for name, key in providers_to_try:
+            if not key:
+                continue
+            try:
+                if name == "mistral":
+                    return await cls._evaluate_mistral(signal, key, mistral_model)
+                elif name == "gemini":
+                    return await cls._evaluate_gemini(signal, key)
+                elif name == "openai":
+                    return await cls._evaluate_openai(signal, key)
+                elif name == "anthropic":
+                    return await cls._evaluate_anthropic(signal, key)
+            except Exception as exc:
+                logger.warning("Tier-2 %s evaluation failed, trying next provider: %s", name, exc)
+
+        # 3. Local Dense Vector Semantic Evaluation (Zero Cost, No API Key, ONNX Runtime)
         return cls._evaluate_local_semantic(signal)
 
     @classmethod
@@ -198,6 +229,40 @@ class LLMEvaluator:
             match = re.search(r"\{.*\}", raw_text, re.DOTALL)
             res_dict = json.loads(match.group(0)) if match else json.loads(raw_text)
             return cls._parse_llm_dict(signal, res_dict, "Claude-3.5-Haiku")
+
+    @classmethod
+    async def _evaluate_mistral(
+        cls, signal: RawPainSignal, api_key: str, model_name: str = "open-mistral-7b"
+    ) -> OpportunityEvaluation:
+        """Evaluates candidate through Mistral AI API using open-mistral-7b."""
+        prompt = cls._build_prompt(signal)
+        url = "https://api.mistral.ai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model_name,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an elite Y-Combinator Venture Architect and Principal Developer Tooling Engineer. Always reply strictly in valid JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                raise RuntimeError(f"Mistral API returned HTTP {resp.status_code}: {resp.text}")
+
+            data = resp.json()
+            raw_text = data["choices"][0]["message"]["content"]
+            match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+            res_dict = json.loads(match.group(0)) if match else json.loads(raw_text)
+            return cls._parse_llm_dict(signal, res_dict, f"Mistral ({model_name})")
 
     @classmethod
     def _build_prompt(cls, signal: RawPainSignal) -> str:
