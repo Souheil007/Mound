@@ -22,8 +22,9 @@ logger = logging.getLogger(__name__)
 # Reference archetype embeddings for local semantic evaluation (when external LLM keys are absent)
 ARCHETYPE_PROMPTS = [
     "Autonomous AI agent governance, tool calling harness, prompt drift detection, context window management, and Model Context Protocol servers",
+    "High-availability distributed database proxy, connection pool multiplexer, adaptive backpressure coordinator, and failover circuit breaker",
     "High-leverage standalone developer productivity tool, CLI utility, SDK generator, API gateway proxy, and workflow orchestration engine",
-    "Automated zero-day CVE vulnerability scanner, exploit surface auditor for agencies, and infrastructure compliance monitor",
+    "Automated zero-day CVE vulnerability scanner, exploit surface auditor for agencies, and continuous infrastructure compliance monitor",
     "SaaS external dependency sentinel, cloud quota and billing alert governor, and synthetic golden-path health check agent",
 ]
 
@@ -91,17 +92,18 @@ class LLMEvaluator:
         max_affinity = max(affinities) if affinities else 0.5
         avg_affinity = sum(affinities) / len(affinities) if affinities else 0.4
 
-        # Dynamic scoring scaled from dense semantic vector affinity
-        tam = int(10 + max(0, min(15, max_affinity * 24)))
-        urgency = int(10 + max(0, min(15, avg_affinity * 22)))
-        wtp = int(10 + max(0, min(15, (max_affinity * 0.7 + avg_affinity * 0.3) * 22)))
-        feasibility = int(12 + max(0, min(13, max_affinity * 20)))
+        # Dynamic scoring scaled from dense semantic vector affinity (no regex counting)
+        tam = int(10 + max(0, min(15, max_affinity * 30)))
+        urgency = int(10 + max(0, min(15, max_affinity * 28)))
+        wtp = int(10 + max(0, min(15, max_affinity * 28)))
+        feasibility = int(10 + max(0, min(15, max_affinity * 28)))
 
         # Engagement resonance bonus
         if signal.engagement_count >= 15:
             tam = min(25, tam + 2)
         if signal.engagement_count >= 50:
             tam = min(25, tam + 2)
+            wtp = min(25, wtp + 2)
 
         total = tam + urgency + wtp + feasibility
         is_viable = total >= 65 and tam >= 12 and urgency >= 12 and wtp >= 12 and feasibility >= 12
@@ -193,7 +195,6 @@ class LLMEvaluator:
 
             data = resp.json()
             raw_text = data["content"][0]["text"]
-            # Extract JSON block
             match = re.search(r"\{.*\}", raw_text, re.DOTALL)
             res_dict = json.loads(match.group(0)) if match else json.loads(raw_text)
             return cls._parse_llm_dict(signal, res_dict, "Claude-3.5-Haiku")
