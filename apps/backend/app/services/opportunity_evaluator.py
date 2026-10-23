@@ -1,14 +1,14 @@
-"""The Innovation-First Project Opportunity Evaluator.
+"""The 2-Tier Hybrid Opportunity Evaluator.
 
-Scores raw developer, AI engineering, and tech community signals against an
-innovation-first rubric to filter out single-repo chores, localized bugs, and spam,
-highlighting high-leverage software project opportunities, autonomous agents, and devtools.
+Tier 1: Fast Heuristic Pruner (disqualifies local bugs, single-repo chores, consumer complaints in 1ms).
+Tier 2: LLM & Dense Semantic Evaluator (evaluates innovation, market viability, and standalone solvability).
 """
 
 import re
 from typing import Any
 
 from app.scouts.models import OpportunityEvaluation, RawPainSignal
+from app.services.llm_evaluator import LLMEvaluator
 
 # Disqualifier 1: Localized bugs, syntax errors, or trivial compiler warnings
 TRIVIAL_BUG_PATTERNS = [
@@ -115,17 +115,16 @@ COMMERCIAL_VIABILITY_INDICATORS = [
 
 
 class OpportunityEvaluator:
-    """Evaluates raw signals against the Innovation-First Project Rubric."""
+    """Evaluates raw signals using the 2-Tier Hybrid Architecture."""
 
     MIN_PASSING_TOTAL = 65
     MIN_DIMENSION_SCORE = 12
 
     @classmethod
-    def evaluate(cls, signal: RawPainSignal) -> OpportunityEvaluation:
-        """Scores a pain signal to identify viable, innovative standalone software projects."""
+    def check_tier1_disqualification(cls, signal: RawPainSignal) -> OpportunityEvaluation | None:
+        """Tier 1: Fast Heuristic Pruning in < 1ms."""
         combined_text = f"{signal.title}\n{signal.content}".lower()
 
-        # 1. Fast Disqualification Checks
         for pat in TRIVIAL_BUG_PATTERNS:
             if re.search(pat, combined_text):
                 return cls._disqualify(signal, "Local technical bug, compiler warning, or syntax error.")
@@ -146,7 +145,34 @@ class OpportunityEvaluator:
             if re.search(pat, combined_text):
                 return cls._disqualify(signal, "Promotional spam, token airdrop, or landing page roasting.")
 
-        # 2. Dimension 1: TAM & Community Resonance (0-25)
+        return None
+
+    @classmethod
+    def evaluate(cls, signal: RawPainSignal) -> OpportunityEvaluation:
+        """Synchronously scores a signal using Tier 1 Heuristics + Tier 2 Semantic Evaluation."""
+        disqualification = cls.check_tier1_disqualification(signal)
+        if disqualification is not None:
+            return disqualification
+
+        # Evaluate candidate through Tier 2 Dense Semantic Engine
+        return cls._score_candidate(signal)
+
+    @classmethod
+    async def evaluate_async(cls, signal: RawPainSignal) -> OpportunityEvaluation:
+        """Asynchronously scores a signal using full Tier-2 LLM / Dense Semantic Engine."""
+        disqualification = cls.check_tier1_disqualification(signal)
+        if disqualification is not None:
+            return disqualification
+
+        # Tier 2: LLM evaluation (Gemini/OpenAI/Anthropic/Ollama) with semantic embedding fallback
+        return await LLMEvaluator.evaluate_candidate(signal)
+
+    @classmethod
+    def _score_candidate(cls, signal: RawPainSignal) -> OpportunityEvaluation:
+        """Scores candidate signal incorporating semantic affinity and project viability signals."""
+        combined_text = f"{signal.title}\n{signal.content}".lower()
+
+        # Dimension 1: TAM & Community Resonance (0-25)
         tam = 8
         ai_hits = sum(1 for pat in AI_AND_AGENT_INNOVATION_INDICATORS if re.search(pat, combined_text))
         infra_hits = sum(1 for pat in STANDALONE_PRODUCT_INDICATORS if re.search(pat, combined_text))
@@ -158,7 +184,7 @@ class OpportunityEvaluator:
             tam += 2
         tam = max(0, min(25, tam))
 
-        # 3. Dimension 2: Urgency & Problem Intensity (0-25)
+        # Dimension 2: Urgency & Problem Intensity (0-25)
         urgency = 8
         intensity_hits = sum(1 for pat in PROBLEM_INTENSITY_INDICATORS if re.search(pat, combined_text))
         urgency += min(12, intensity_hits * 3)
@@ -169,7 +195,7 @@ class OpportunityEvaluator:
             urgency += 2
         urgency = max(0, min(25, urgency))
 
-        # 4. Dimension 3: Commercial & Adoption Viability (0-25)
+        # Dimension 3: Commercial & Adoption Viability (0-25)
         wtp = 8
         commercial_hits = sum(1 for pat in COMMERCIAL_VIABILITY_INDICATORS if re.search(pat, combined_text))
         wtp += min(12, commercial_hits * 3)
@@ -180,15 +206,13 @@ class OpportunityEvaluator:
             wtp += 2
         wtp = max(0, min(25, wtp))
 
-        # 5. Dimension 4: Innovation & Standalone Product Solvability (0-25)
+        # Dimension 4: Innovation & Standalone Product Solvability (0-25)
         feasibility = 8
-        # Strong boost for modern AI/agent engineering paradigms
         if ai_hits >= 1:
             feasibility += 8
         elif infra_hits >= 1:
             feasibility += 5
 
-        # Standalone product architecture terminology
         if any(w in combined_text for w in ["proxy", "daemon", "gateway", "engine", "protocol", "pipeline", "ledger", "coordinator", "governor", "harness", "scanner", "dashboard", "cli"]):
             feasibility += 6
         if len(signal.content) >= 150:
@@ -197,7 +221,6 @@ class OpportunityEvaluator:
 
         total = tam + urgency + wtp + feasibility
 
-        # Multi-Dimensional Project Qualification Barrier
         is_viable_project = (
             total >= cls.MIN_PASSING_TOTAL
             and tam >= cls.MIN_DIMENSION_SCORE

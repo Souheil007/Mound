@@ -43,5 +43,13 @@ class Settings(BaseSettings):
     reddit_client_secret: str | None = None
     reddit_target_subreddits: list[str] | None = None
 
+    # Tier-2 LLM Evaluator
+    llm_provider: str = "gemini"  # "gemini", "openai", "anthropic", "ollama", or "semantic_embedding"
+    gemini_api_key: str | None = None
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3"
+
 
 settings = Settings()
